@@ -3,7 +3,7 @@ SafecastLog2Pdf
 
 Safecast tool to convert bGeigie logs to static pdf maps
 
-(https://github.com/bidouilles/SafecastLog2Pdf/blob/master/samples/screenshot.jpg)
+![Screenshot](https://github.com/bidouilles/SafecastLog2Pdf/blob/master/samples/screenshot.jpg)
 
 Requirements
 ------------
