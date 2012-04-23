@@ -742,7 +742,7 @@ def generatePDFReport(mapName, size, legend, statisticTable):
     if options.language == "jp":
       from reportlab.pdfbase import pdfmetrics
       from reportlab.pdfbase.ttfonts import TTFont
-      pdfmetrics.registerFont(TTFont('Japanese', os.path.realpath(os.path.dirname(sys.argv[0]))+"/kochi-gothic.ttf"))
+      pdfmetrics.registerFont(TTFont('Japanese', os.path.realpath(os.path.dirname(sys.argv[0]))+"/data/font/kochi-gothic.ttf"))
 
     # Compute the page size
     pageWidth = (size[0]+1)*inch
@@ -761,7 +761,7 @@ def generatePDFReport(mapName, size, legend, statisticTable):
       styles.add(ParagraphStyle(name='Centered', alignment=TA_CENTER))
 
     # Add the safecast logo
-    im = ImageRL(os.path.realpath(os.path.dirname(sys.argv[0]))+"/safecast_horizontal.png")
+    im = ImageRL(os.path.realpath(os.path.dirname(sys.argv[0]))+"/data/logo/safecast_horizontal.png")
     im.drawHeight = 3*inch*im.drawHeight / im.drawWidth
     im.drawWidth = 3*inch
     Story.append(im)
