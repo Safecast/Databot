@@ -539,7 +539,7 @@ def loadTiles(lat_min,lon_min,lat_max,lon_max, zoom):
 # -----------------------------------------------------------------------------
 # Draw final map (tile layer + rectangular binning 100mx100m layer)
 # -----------------------------------------------------------------------------
-def drawMap(filename, options, showTitle):
+def drawMap(filename, language, showTitle):
     mapName = os.path.splitext(filename)[0]
     print "Generating %s.png ..." % mapName
 
@@ -593,21 +593,21 @@ def drawMap(filename, options, showTitle):
     title = "%s\n(%s -> %s)" % (filename, start.strftime("%Y/%m/%d %H:%M"), stop.strftime("%Y/%m/%d %H:%M"))
     statistics = u"area %.3f km x %.3f km | min %.3f µSv/h, max %.3f µSv/h, avg %.3f µSv/h | dose %.3f µSv" % (width, height, float(cpm.min()), float(cpm.max()), float(cpm.mean()), float(dose))
 
-    statTable=[(sLabels["points"][options.language], len(cpm)),
-               (sLabels["start"][options.language],start),
-               (sLabels["stop"][options.language],"%s (%d minutes)" % (stop, minutes_difference(stopZ, startZ))),
-               (sLabels["covered"][options.language], "%.3f km x %.3f km" % (width, height)),
-               (sLabels["north"][options.language], ("%.6f" % lat_max)),
-               (sLabels["south"][options.language], ("%.6f" % lat_min)),
-               (sLabels["west"][options.language], ("%.6f" % lon_min)),
-               (sLabels["east"][options.language], ("%.6f" % lon_max)),
-               (sLabels["rmax"][options.language], ("%.3f" % cpm.max()).lstrip("0")),
-               (sLabels["ravg"][options.language], ("%.3f" % cpm.mean()).lstrip("0")),
-               (sLabels["rmin"][options.language], ("%.3f" % cpm.min()).lstrip("0")),
+    statTable=[(sLabels["points"][language], len(cpm)),
+               (sLabels["start"][language],start),
+               (sLabels["stop"][language],"%s (%d minutes)" % (stop, minutes_difference(stopZ, startZ))),
+               (sLabels["covered"][language], "%.3f km x %.3f km" % (width, height)),
+               (sLabels["north"][language], ("%.6f" % lat_max)),
+               (sLabels["south"][language], ("%.6f" % lat_min)),
+               (sLabels["west"][language], ("%.6f" % lon_min)),
+               (sLabels["east"][language], ("%.6f" % lon_max)),
+               (sLabels["rmax"][language], ("%.3f" % cpm.max()).lstrip("0")),
+               (sLabels["ravg"][language], ("%.3f" % cpm.mean()).lstrip("0")),
+               (sLabels["rmin"][language], ("%.3f" % cpm.min()).lstrip("0")),
 #               ("Total dose (µSv)", ("%.3f" % dose).lstrip("0")),
-               (sLabels["aavg"][options.language], ("%.3f" % altitude.mean()).lstrip("0")),
-               (sLabels["amin"][options.language], ("%.3f" % altitude.min()).lstrip("0")),
-               (sLabels["amax"][options.language], ("%.3f" % altitude.max()).lstrip("0")),
+               (sLabels["aavg"][language], ("%.3f" % altitude.mean()).lstrip("0")),
+               (sLabels["amin"][language], ("%.3f" % altitude.min()).lstrip("0")),
+               (sLabels["amax"][language], ("%.3f" % altitude.max()).lstrip("0")),
     ]
 
     # Adjust label size and tiles zoom
@@ -690,7 +690,7 @@ def drawMap(filename, options, showTitle):
             plt.text(tx,ty,value, fontsize=fontsize, ha='center',va='center',color='k', fontweight='bold')
 
     # Legend
-    legend = sLabels["legend"][options.language]
+    legend = sLabels["legend"][language]
     divider = make_axes_locatable(plt.gca())
     cax = divider.append_axes("bottom", size="5%", pad=0.05)
     cbar = plt.colorbar(cax=cax, orientation="hozrizontal", format=u"%0.3f~\nµSv/h")
@@ -733,13 +733,13 @@ def firstPage(canvas, doc):
     canvas.setFont("Helvetica", 7)
     canvas.drawString(0.75*pageWidth, pageHeight-1*cm, ("Printed")+": %s" % time)
 
-def generatePDFReport(mapName, size, legend, statisticTable):
+def generatePDFReport(mapName, language, size, legend, statisticTable):
     print "Generating report %s.pdf ..." % mapName
     Story=[]
     global pageWidth
     global pageHeight
 
-    if options.language == "jp":
+    if language == "jp":
       from reportlab.pdfbase import pdfmetrics
       from reportlab.pdfbase.ttfonts import TTFont
       pdfmetrics.registerFont(TTFont('Japanese', os.path.realpath(os.path.dirname(sys.argv[0]))+"/data/font/kochi-gothic.ttf"))
@@ -755,7 +755,7 @@ def generatePDFReport(mapName, size, legend, statisticTable):
 
     styles=getSampleStyleSheet()
     styles.add(ParagraphStyle(name='Justify', alignment=TA_JUSTIFY))
-    if options.language == "jp":
+    if language == "jp":
       styles.add(ParagraphStyle(name='Centered', alignment=TA_CENTER, fontName='Japanese'))
     else:
       styles.add(ParagraphStyle(name='Centered', alignment=TA_CENTER))
@@ -784,7 +784,7 @@ def generatePDFReport(mapName, size, legend, statisticTable):
          ('LINEBELOW', (0,-1), (-1,-1), 2, colorsRL.green),
 #         ('FONTSIZE', (0, 0), (-1, -1), 10),
         ])
-    if options.language == "jp":
+    if language == "jp":
        tableStyle.add(*('FONT', (0,0), (-1,-1), 'Japanese', 10))
     table.setStyle(tableStyle)
     Story.append(table)
@@ -796,7 +796,7 @@ def generatePDFReport(mapName, size, legend, statisticTable):
 # -----------------------------------------------------------------------------
 # Generate HTML report
 # -----------------------------------------------------------------------------
-def generateHTMLReport(mapName, statisticTable, skipped):
+def generateHTMLReport(mapName, language, statisticTable, skipped):
     htmlMessageHeader = """\
 <html>
   <head>
@@ -839,16 +839,16 @@ def generateHTMLReport(mapName, statisticTable, skipped):
 
     htmlMessage = htmlMessageHeader
 
-    htmlMessage += "<h1>%s</h1><table cellspacing='0'>" % sLabels["summary"][options.language]
+    htmlMessage += "<h1>%s</h1><table cellspacing='0'>" % sLabels["summary"][language]
     for e in statisticTable:
        htmlMessage += "<tr><th align='left'>%s</th><td>%s</td></tr>" % (e[0], e[1])
     htmlMessage += "</table>"
 
     if len(skipped):
-      htmlMessage += "<h1>%s</h1>" % sLabels["error"][options.language]
-      htmlMessage += "%s: %s" % (sLabels["skipped"][options.language], ", ".join(sum([[str(x)+y for x in skipped[y]] for y in skipped.keys()], [])))
+      htmlMessage += "<h1>%s</h1>" % sLabels["error"][language]
+      htmlMessage += "%s: %s" % (sLabels["skipped"][language], ", ".join(sum([[str(x)+y for x in skipped[y]] for y in skipped.keys()], [])))
 
-    htmlMessage += "<br>%s" % (sLabels["question"][options.language])
+    htmlMessage += "<br>%s" % (sLabels["question"][language])
     htmlMessage += htmlMessageFooter
 
     message = open(mapName+".html", "w")
@@ -884,14 +884,14 @@ if __name__ == '__main__':
       
       try:
         # Draw map
-        mapInfo = drawMap(f, options, False)
+        mapInfo = drawMap(f, language, False)
         if len(mapInfo) == 0:
            # Wrong file, skip it
            continue
         size, legend, statisticTable, skipped = mapInfo
         # Generate reports
-        generatePDFReport(os.path.splitext(f)[0], size, legend, statisticTable)
-        generateHTMLReport(os.path.splitext(f)[0], statisticTable, skipped)
+        generatePDFReport(os.path.splitext(f)[0], language, size, legend, statisticTable)
+        generateHTMLReport(os.path.splitext(f)[0], language, statisticTable, skipped)
       except:
         print '-'*60
         traceback.print_exc(file=sys.stdout)
