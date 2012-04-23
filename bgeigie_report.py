@@ -884,14 +884,14 @@ if __name__ == '__main__':
       
       try:
         # Draw map
-        mapInfo = drawMap(f, language, False)
+        mapInfo = drawMap(f, options.language, False)
         if len(mapInfo) == 0:
            # Wrong file, skip it
            continue
         size, legend, statisticTable, skipped = mapInfo
         # Generate reports
-        generatePDFReport(os.path.splitext(f)[0], language, size, legend, statisticTable)
-        generateHTMLReport(os.path.splitext(f)[0], language, statisticTable, skipped)
+        generatePDFReport(os.path.splitext(f)[0], options.language, size, legend, statisticTable)
+        generateHTMLReport(os.path.splitext(f)[0], options.language, statisticTable, skipped)
       except:
         print '-'*60
         traceback.print_exc(file=sys.stdout)
