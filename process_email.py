@@ -173,7 +173,7 @@ class Gmail():
 # Main
 # -----------------------------------------------------------------------------
 if __name__ == '__main__':
-  # Load config settings
+  # Load settings from config file
   config = ConfigParser.ConfigParser()
   config.read(os.path.realpath(os.path.dirname(sys.argv[0]))+"/.safecast.conf")
 
@@ -194,6 +194,7 @@ if __name__ == '__main__':
     sender, filelist, language = result
 
     reports = []
+    processStatus = []
     for f in filelist:
       bgeigie_report.logfile = os.path.basename(f)
 
@@ -207,14 +208,23 @@ if __name__ == '__main__':
         # Generate reports
         bgeigie_report.generatePDFReport(os.path.splitext(f)[0], language, size, legend, statisticTable)
         bgeigie_report.generateHTMLReport(os.path.splitext(f)[0], language, statisticTable, skipped)
+        processStatus.append((f, sum([len(skipped[e]) for e in skipped.keys()])))
       except:
+        # Generic trap if something crashed
         logPrint('-'*60)
         traceback.print_exc(file=sys.stdout)
         logPrint('-'*60)
-        # Generic trap if something crashed
+        processStatus.append((f, -1))
         continue
 
       reports.append(os.path.splitext(f)[0]+".pdf")
+
+    # Display a status summary
+    print '='*60
+    print "Log file\tExceptions (-1 = failure)"
+    for s in processStatus:
+      print "%s\t%d" % s
+    print '='*60
 
     gmail.send([sender], os.path.splitext(f)[0]+".html", reports)
 

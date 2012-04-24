@@ -13,6 +13,7 @@ import os, sys, time, traceback
 from datetime import datetime, timedelta
 from optparse import OptionParser
 import glob
+import tempfile
 
 # for py2exe binary
 #os.environ['BASEMAPDATA'] = os.path.realpath(os.path.dirname(sys.argv[0]))+"/mpl_toolkits/basemap/data"
@@ -73,7 +74,7 @@ from reportlab.pdfbase import _fontdata_widths_symbol
 from reportlab.pdfbase import _fontdata_widths_zapfdingbats 
 
 # Default parameters
-dataFolder = "data"
+dataFolder = os.path.realpath(os.path.dirname(sys.argv[0]))+"/data"
 binSize = 0.1 # 0.1 km
 borderSize = 1.0 # x binSize
 CPMfactor = 300.0
@@ -493,8 +494,8 @@ def loadTiles(lat_min,lon_min,lat_max,lon_max, zoom):
     tilesX = gx1-gx0+1
     tilesY = gy1-gy0+1
 
-    if not os.path.exists("data/tiles/%s" % zoom):
-      os.makedirs("data/tiles/%s" % zoom)
+    if not os.path.exists(dataFolder+"/tiles/%s" % zoom):
+      os.makedirs(dataFolder+"/tiles/%s" % zoom)
 
     # Start looping
     gx = gx0
@@ -504,7 +505,7 @@ def loadTiles(lat_min,lon_min,lat_max,lon_max, zoom):
       images_horizontal = []
       while (gy <= gy1):
         X = gx % (1 << zoom)
-        filename = "data/tiles/%s/%d-%d.png" % (zoom, gx, gy)
+        filename = dataFolder+"/tiles/%s/%d-%d.png" % (zoom, gx, gy)
         pngurl = "http://a.tile.openstreetmap.org/%d/%d/%d.png" % (int(zoom), int(X), int(gy))
         download(pngurl, filename)
 
@@ -531,7 +532,7 @@ def loadTiles(lat_min,lon_min,lat_max,lon_max, zoom):
         pasteY += 256
       pasteX += 256
 
-    spriteSheet.save("jp_map_tiles.png", quality=50)
+    spriteSheet.save(os.path.join(tempfile.gettempdir(),"jp_map_tiles.png"), quality=50)
 
     c = projection.corners(gx0 , gy0, gx1 , gy1, zoom)
     return c
@@ -620,7 +621,7 @@ def drawMap(filename, language, showTitle):
     scales.sort()
     scales.reverse()
     for s in scales:
-      if max(width,height) < s:
+      if max(owidth,oheight) < s:
         continue
       else:
        print scaleTable[s]
@@ -630,20 +631,11 @@ def drawMap(filename, language, showTitle):
        dpi = scaleTable[s]["dpi"]
        break
 
-    #print title, zoom, fontsize, labelsize
-
     # Load tiles
     ctilesLon, ctilesLat = loadTiles(lat_min,lon_min,lat_max,lon_max, zoom)
 
     # Create the basemap
     m = Basemap(projection='merc', llcrnrlon=lon_min ,llcrnrlat=lat_min, urcrnrlon=lon_max ,urcrnrlat=lat_max, resolution='i')
-
-    # Compute the scale for the parallels and meridians lines
-    scale = min((lon_max-lon_min), (lat_max-lat_min))/2
-
-    # Draw parallels and meridians lines
-    #m.drawparallels(np.arange(lat.min(),lat.max(),scale), labels=[1,0,0,0], color='black',dashes=[1,0],labelstyle='+/-',linewidth=0.2)
-    #m.drawmeridians(np.arange(lon.min(),lon.max(),scale), labels=[0,0,0,1], color='black',dashes=[1,0],labelstyle='+/-',linewidth=0.2)
 
     # Compute Hayakawa-san color map
     levels, cmap, normCPM = JPsafecast_cmap()
@@ -662,12 +654,12 @@ def drawMap(filename, language, showTitle):
     xmin,xmax = min(tx),max(tx)
     ymin,ymax = min(ty),max(ty)
     tilesExtent = (xmin,xmax,ymin,ymax)
-    tiles = Image.open("jp_map_tiles.png").transpose(Image.FLIP_TOP_BOTTOM)
+    tiles = Image.open(os.path.join(tempfile.gettempdir(),"jp_map_tiles.png")).transpose(Image.FLIP_TOP_BOTTOM)
     plt.imshow(tiles, extent = tilesExtent, alpha = 0.8)
    
     # Draw Safecast data on the map
     m.scatter(x, y, s=0.1, c=cpm, cmap=cmap, linewidths=0.1, alpha=0.1, facecolors='none', norm=normCPM)
-    #m.scatter(x, y, s=3, c=cpm, cmap=cmap, linewidths=0.1, alpha=1, norm=normCPM, zorder = 5) # facecolors='none'
+    #m.scatter(x, y, s=3, c=cpm, cmap=cmap, linewidths=0.1, alpha=1, norm=normCPM, zorder = 5)
 
     # Draw the rectangle binning
     x_min,y_min = m(lon_min,lat_min)
@@ -708,7 +700,6 @@ def drawMap(filename, language, showTitle):
     # Save png file
     plt.savefig(mapName+".png", dpi = dpi, bbox_inches='tight')
     Image.open(mapName+".png").save(mapName+".jpg",quality=70) # create a 70% quality jpeg
-    #plt.savefig(mapName+".pdf", dpi = (300), bbox_inches='tight')
     plt.clf() # clear the plot (free the memory for the other threads)
     pl.close('all')
 
@@ -742,7 +733,7 @@ def generatePDFReport(mapName, language, size, legend, statisticTable):
     if language == "jp":
       from reportlab.pdfbase import pdfmetrics
       from reportlab.pdfbase.ttfonts import TTFont
-      pdfmetrics.registerFont(TTFont('Japanese', os.path.realpath(os.path.dirname(sys.argv[0]))+"/data/font/kochi-gothic.ttf"))
+      pdfmetrics.registerFont(TTFont('Japanese', dataFolder+"/font/kochi-gothic.ttf"))
 
     # Compute the page size
     pageWidth = (size[0]+1)*inch
@@ -761,7 +752,7 @@ def generatePDFReport(mapName, language, size, legend, statisticTable):
       styles.add(ParagraphStyle(name='Centered', alignment=TA_CENTER))
 
     # Add the safecast logo
-    im = ImageRL(os.path.realpath(os.path.dirname(sys.argv[0]))+"/data/logo/safecast_horizontal.png")
+    im = ImageRL(dataFolder+"/logo/safecast_horizontal.png")
     im.drawHeight = 3*inch*im.drawHeight / im.drawWidth
     im.drawWidth = 3*inch
     Story.append(im)
@@ -878,6 +869,7 @@ if __name__ == '__main__':
 
     # Generate map and report
     files += newFiles
+    processStatus = []
     for f in files:
       global logfile
       logfile = os.path.basename(f)
@@ -892,11 +884,21 @@ if __name__ == '__main__':
         # Generate reports
         generatePDFReport(os.path.splitext(f)[0], options.language, size, legend, statisticTable)
         generateHTMLReport(os.path.splitext(f)[0], options.language, statisticTable, skipped)
+        processStatus.append((f, sum([len(skipped[e]) for e in skipped.keys()])))
       except:
+        # Generic trap if something crashed
         print '-'*60
         traceback.print_exc(file=sys.stdout)
         print '-'*60
-        # Generic trap if something crashed
+        processStatus.append((f, -1))
         continue
+    
+    # Display a status summary
+    print '='*60
+    print "Log file\tExceptions (-1 = failure)"
+    for s in processStatus:
+      print "%s\t%d" % s
+    print '='*60
+     
 
 
