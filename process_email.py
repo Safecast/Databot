@@ -23,6 +23,9 @@ from email.mime.multipart import MIMEMultipart
 from email.MIMEBase import MIMEBase
 from email import Encoders
 
+# zip file support
+import zipfile
+
 # -----------------------------------------------------------------------------
 # Log print
 # -----------------------------------------------------------------------------
@@ -36,6 +39,46 @@ class Gmail():
    def __init__(self, user, password):
      self.user = user
      self.pwd = password
+     self.folder = ""
+     self.recipients = []  
+     self.message = ""      
+     self.files = []
+
+   # --------------------------------------------------------------------------
+   # Private utility methods
+   # --------------------------------------------------------------------------
+   def _createMessage(self, subject):
+     msg = MIMEMultipart()    
+     msg['Subject'] = subject
+     msg['From'] = self.user
+     msg['To'] = ",".join(self.recipients)
+     msg.preample = 'Your mail attacment follows'
+     return msg;
+
+   def _attachHTML(self, filename):
+     fp = open(filename, 'rb')
+     part = MIMEText(fp.read(), 'html')
+     fp.close()
+     return part;
+
+   def _attachFile(self, filename):
+     fp = open(filename, 'rb')
+     part = MIMEBase('application', "octet-stream")
+     part.set_payload( fp.read()  )
+     fp.close()
+     Encoders.encode_base64(part)
+     part.add_header('Content-Disposition', 'attachment; filename="%s"' % os.path.basename(filename))
+     return part;
+
+   def _sendMessage(self, msg):    
+     # Send the email to the SMTP server.
+     smtp = smtplib.SMTP('smtp.gmail.com',587)
+     smtp.ehlo()
+     smtp.starttls()
+     smtp.ehlo()
+     smtp.login(self.user,self.pwd)
+     smtp.sendmail(self.user, self.recipients, msg.as_string())
+     smtp.quit()
 
    # --------------------------------------------------------------------------
    # Fetch unseen emails attachment
@@ -59,7 +102,6 @@ class Gmail():
      items = items[:1] # only one by one
 
      result = []
-
      for emailid in items:
          logPrint("[GMAIL] Processing email id %s" % emailid)
          resp, data = m.fetch(emailid, "(RFC822)") # fetching the mail
@@ -102,7 +144,6 @@ class Gmail():
 
              logPrint("[GMAIL]  - Fetching %s" % filename)
              att_path = os.path.join(self.folder, filename)
-             filelist.append(att_path)
 
              # Check if its already there
              if not os.path.isfile(att_path) :
@@ -110,6 +151,28 @@ class Gmail():
                  fp = open(att_path, 'wb')
                  fp.write(part.get_payload(decode=True))
                  fp.close()
+
+             if os.path.splitext(filename)[1] != ".LOG":
+                logPrint("Check for attached zip file ...")
+                try:
+                  filezip = zipfile.ZipFile(att_path, "r")
+                  for info in filezip.infolist():
+                     if os.path.splitext(info.filename)[1] == ".LOG":
+                       logname = os.path.join(self.folder, os.path.basename(info.filename))
+                       logPrint(" - %s [%d bytes]" % (logname, info.file_size))
+                       fp = open(logname, "wb")
+                       data = filezip.read(info.filename)
+                       fp.write(data)
+                       fp.close()
+                       filelist.append(logname)
+                except:
+                  # Wrong file, continue to next attachment
+                  continue
+                finally:
+                  os.remove(att_path)
+                logPrint("Done.")
+             else:
+                filelist.append(att_path)
 
          result = [sender, filelist, language]
 
@@ -119,47 +182,29 @@ class Gmail():
    # --------------------------------------------------------------------------
    # Send email to recipients with attachments
    # --------------------------------------------------------------------------
-   def send(self, recipients, message, files):
-     self.recipients = recipients  
-     self.message = message      
+   def send(self, recipients, files):
+     self.recipients = recipients      
      self.files = files
 
-     for f in self.files:
+     for h,pdf in self.files:
        try:
          # Multipart emails
-         msg = MIMEMultipart()    
-         msg['Subject'] = 'SAFECAST Radiation Survey Summary Map (%s)' % os.path.basename(f)
-         msg['From'] = self.user
-         msg['To'] = ",".join(self.recipients)
-         msg.preample = 'Your mail attacment follows'
+         msg = self._createMessage(
+             'SAFECAST Radiation Survey Summary Map (%s)' % os.path.basename(pdf))
 
          logPrint("[GMAIL] "+msg['Subject'])
 
          # Add html email message
-         fp = open(self.message, 'rb')
-         html = MIMEText(fp.read(), 'html')
-         fp.close()
+         html = self._attachHTML(h)
          msg.attach(html)
 
          # Add report pdf attachment
-         fp = open(f, 'rb')
-         report = MIMEBase('application', "octet-stream")
-         report.set_payload( fp.read()  )
-         fp.close()
-         Encoders.encode_base64(report)
-         report.add_header('Content-Disposition', 'attachment; filename="%s"' % os.path.basename(f))
+         report = self._attachFile(pdf)
          msg.attach(report)
 
          # Send the email via our own SMTP server.
-         logPrint("[GMAIL] Sending the email ...") 
-         s = smtplib.SMTP('smtp.gmail.com',587)
-         s.ehlo()
-         s.starttls()
-         s.ehlo()
-         s.login(self.user,self.pwd)
-         s.sendmail(self.user, self.recipients, msg.as_string())
-         s.quit()
-
+         logPrint("[GMAIL] Sending the email ...")
+         self._sendMessage(msg)
          logPrint("[GMAIL] Done.")
 
        except:
@@ -217,7 +262,7 @@ if __name__ == '__main__':
         processStatus.append((f, -1))
         continue
 
-      reports.append(os.path.splitext(f)[0]+".pdf")
+      reports.append((os.path.splitext(f)[0]+".html", os.path.splitext(f)[0]+".pdf"))
 
     # Display a status summary
     print '='*60
@@ -226,7 +271,7 @@ if __name__ == '__main__':
       print "%s\t%d" % s
     print '='*60
 
-    gmail.send([sender], os.path.splitext(f)[0]+".html", reports)
+    gmail.send([sender], reports)
 
   print '='*80
 
