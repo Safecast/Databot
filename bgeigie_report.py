@@ -180,8 +180,9 @@ def seconds_difference(stamp1, stamp2):
 
 # -----------------------------------------------------------------------------
 # Split bGeigie raw log file
+# TODO: to be merged to loadLogFile
 # -----------------------------------------------------------------------------
-def splitLogFile(filename):
+def splitLogFile(filename, timeSplit, distanceSplit):
   # Load the bGeigie log file
   bg = open(filename, "r")
   lines = bg.readlines()
@@ -190,6 +191,8 @@ def splitLogFile(filename):
   # Initialize log counter
   logCounter = 1
   dlasttime = 0
+  blastlat = 0
+  blastlon = 0
   logBaseName = os.path.splitext(filename)[0]
   newFilename = "%s_%03d.LOG" % (logBaseName,logCounter)
   newFiles = []
@@ -204,18 +207,31 @@ def splitLogFile(filename):
        continue
     data = line.split(",")
 
-    # Ignore invalid data
-    if len(data) != 15 or data[6] != "A" or data[0] != "$BMRDD":
-        split.write("%s" % line)
-        continue
+    # Check for bGeigieMini or bGeigie
+    if data[0] == "$BMRDD" or data[0] == "$BGRDD":
+      if len(data) != 15 or data[6] != "A":
+         skippedLines["U"].append(lineCounter)
+         split.write("%s" % line)
+         continue
+
+      # Unpack the data
+      (s_header,s_id,s_time,
+       s_cpm,s_cp5s,s_totc,
+       s_rnStatus,s_latitude,s_northsouthindicator,s_longitude,s_eastwestindicator,
+       s_altitude,s_gpsStatus,s_dop,s_quality) = data
+    else:
+      # Ignore invalid data
+      skippedLines["U"].append(lineCounter)
+      split.write("%s" % line)
+      continue
 
     # Extract date and CPM measurements
     try:
-      bdate = data[2]
+      bdate = s_time
       dtime = datetime.strptime(bdate, '%Y-%m-%dT%H:%M:%SZ')
 
       # Check time difference between readings
-      if dlasttime != 0:
+      if dlasttime != 0 and timeSplit:
          delta = seconds_difference(dtime, dlasttime)
          if delta > maxDelayBetweenReadings or delta < -maxDelayBetweenReadings:
            split.close()
@@ -223,7 +239,32 @@ def splitLogFile(filename):
            newFilename = "%s_%03d.LOG" % (logBaseName,logCounter)
            newFiles.append(newFilename)
            split = open(newFilename,"w")
+           blastlat = 0
+           blastlon = 0
       dlasttime = dtime
+
+      # Convert from GPS format (DDDMM.MMMM..) to decimal degrees    
+      blat = float(s_latitude)/100
+      blon = float(s_longitude)/100 
+      blon = ((blon-int(blon))/60)*100+int(blon)
+      blat = ((blat-int(blat))/60)*100+int(blat)
+      # Outside Japan, skip the reading
+      if (blat < JP_lat_min) or (blat > JP_lat_max) or (blon < JP_lon_min) or (blon > JP_lon_max):
+          skippedLines["O"].append(lineCounter)
+          split.write("%s" % line)
+          continue
+      # Too far away, split the reading
+      if (blastlon != 0) and (blastlat != 0) and distanceSplit:
+         deltakm = distance_on_unit_sphere(blastlat, blastlon, blat, blon) * 6373
+         if deltakm > maxDistanceBetweenReadings:
+           split.close()
+           logCounter+=1
+           newFilename = "%s_%03d.LOG" % (logBaseName,logCounter)
+           newFiles.append(newFilename)
+           split = open(newFilename,"w")
+           dlasttime = 0
+      blastlat = blat
+      blastlon = blon
 
       split.write("%s" % line)
     except:
@@ -273,14 +314,25 @@ def loadLogFile(filename, enableuSv):
     if line[0] == "#": continue # ignore comments
     data = line.split(",")
 
-    # Ignore invalid data
-    if len(data) != 15 or data[6] != "A" or data[0] != "$BMRDD":
-        skippedLines["U"].append(lineCounter)
-        continue    
+    # Check for bGeigieMini or bGeigie
+    if data[0] == "$BMRDD" or data[0] == "$BGRDD":
+      if len(data) != 15 or data[6] != "A":
+         skippedLines["U"].append(lineCounter)
+         continue
+
+      # Unpack the data
+      (s_header,s_id,s_time,
+       s_cpm,s_cp5s,s_totc,
+       s_rnStatus,s_latitude,s_northsouthindicator,s_longitude,s_eastwestindicator,
+       s_altitude,s_gpsStatus,s_dop,s_quality) = data
+    else:
+      # Ignore invalid data
+      skippedLines["U"].append(lineCounter)
+      continue
 
     # Extract date and CPM measurements
     try:
-      bdate = data[2]
+      bdate = s_time
       dtime = datetime.strptime(bdate, '%Y-%m-%dT%H:%M:%SZ')
 
       # Check time difference between readings
@@ -292,14 +344,14 @@ def loadLogFile(filename, enableuSv):
            continue  
       dlasttime = dtime
 
-      bcpm = float(data[3])
+      bcpm = float(s_cpm)
       if enableuSv: bcpm /= CPMfactor
-      totalDose += float(data[4])
-      baltitude = float(data[11])   
+      totalDose += float(s_cp5s)
+      baltitude = float(s_altitude)   
 
       # Convert from GPS format (DDDMM.MMMM..) to decimal degrees    
-      blat = float(data[7])/100
-      blon = float(data[9])/100 
+      blat = float(s_latitude)/100
+      blon = float(s_longitude)/100 
       blon = ((blon-int(blon))/60)*100+int(blon)
       blat = ((blat-int(blat))/60)*100+int(blat)
       # Outside Japan, skip the reading
@@ -378,7 +430,7 @@ def rectangularBinNumpy(x_min,y_min,x_max,y_max, data, xbins,ybins=None):
     avg = [[0.0 for x in xrange(xbins)] for y in xrange(ybins)]
     centers = [[centerbin(x,y) for x in xrange(xbins)] for y in xrange(ybins)]
     
-    # Compute average
+    # Compute histogram
     for i in range(len(data)):
       x,y,c = data[i]
       xb = dLon[i] - 1
@@ -386,7 +438,7 @@ def rectangularBinNumpy(x_min,y_min,x_max,y_max, data, xbins,ybins=None):
       hist[yb][xb] += 1 # count per rectangles
       avg[yb][xb] += c  # total value per rectangles
 
-    # Compute average
+    # Compute average and mask
     for xb in range(xbins):
       for yb in range(ybins):
         if hist[yb][xb] > 0.0:
@@ -546,6 +598,9 @@ def drawMap(filename, language, showTitle):
 
     # Load data log
     dt, lat, lon, cpm, altitude, dose, skipped = loadLogFile(filename, True)
+    if not len(dt):
+      print "No valid data available."
+      return []
 
     owidth = distance_on_unit_sphere(lat.min(),lon.min(),lat.min(),lon.max())*6373
     oheight = distance_on_unit_sphere(lat.min(),lon.min(),lat.max(),lon.min())*6373
@@ -864,8 +919,8 @@ if __name__ == '__main__':
     # Split drives if necessary
     newFiles = []
     for f in files:     
-      nf = splitLogFile(f)
-      newFiles += nf
+      newFile = splitLogFile(f, True, False)
+      newFiles += newFile
 
     # Generate map and report
     files += newFiles
