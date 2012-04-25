@@ -80,6 +80,7 @@ borderSize = 1.0 # x binSize
 CPMfactor = 300.0
 maxDelayBetweenReadings = 2*60*60 # 2 hour is suspect (split)
 maxDistanceBetweenReadings = 100*binSize # 10 km is suspect
+debugMode = False
 
 # Globals
 global logfile
@@ -128,6 +129,32 @@ scaleTable = {
 }
 
 # -----------------------------------------------------------------------------
+# Log print
+# -----------------------------------------------------------------------------
+def logPrint(message):
+   print datetime.now().strftime("%Y-%m-%d %H:%M:%S"), message
+# -----------------------------------------------------------------------------
+# Debug decorator
+# -----------------------------------------------------------------------------
+def trace( debug ):
+    def concreteDescriptor( aFunc ):
+       if debug:
+         def loggedFunc( *args, **kw ):
+           logPrint("> "+ aFunc.__name__)
+           try:
+               result= aFunc( *args, **kw )
+           except Exception, e:
+               print "exception", aFunc.__name__, e
+               raise
+           logPrint("< "+ aFunc.__name__)
+           return result
+         loggedFunc.__name__= aFunc.__name__
+         loggedFunc.__doc__= aFunc.__doc__
+         return loggedFunc
+       else:
+         return aFunc
+    return concreteDescriptor
+# -----------------------------------------------------------------------------
 # Compute distance between two geographic positions
 # -----------------------------------------------------------------------------
 # from http://www.johndcook.com/python_longitude_latitude.html
@@ -159,7 +186,7 @@ def distance_on_unit_sphere(lat1, long1, lat2, long2):
 
     # Remember to multiply arc by the radius of the earth 
     # in your favorite set of units to get length.
-    return arc
+    return arc * 6373 # 6373 for km
   except:
     return 0
 
@@ -182,6 +209,7 @@ def seconds_difference(stamp1, stamp2):
 # Split bGeigie raw log file
 # TODO: to be merged to loadLogFile
 # -----------------------------------------------------------------------------
+@trace(debugMode)
 def splitLogFile(filename, timeSplit, distanceSplit):
   # Load the bGeigie log file
   bg = open(filename, "r")
@@ -210,7 +238,6 @@ def splitLogFile(filename, timeSplit, distanceSplit):
     # Check for bGeigieMini or bGeigie
     if data[0] == "$BMRDD" or data[0] == "$BGRDD":
       if len(data) != 15 or data[6] != "A":
-         skippedLines["U"].append(lineCounter)
          split.write("%s" % line)
          continue
 
@@ -221,7 +248,6 @@ def splitLogFile(filename, timeSplit, distanceSplit):
        s_altitude,s_gpsStatus,s_dop,s_quality) = data
     else:
       # Ignore invalid data
-      skippedLines["U"].append(lineCounter)
       split.write("%s" % line)
       continue
 
@@ -255,7 +281,7 @@ def splitLogFile(filename, timeSplit, distanceSplit):
           continue
       # Too far away, split the reading
       if (blastlon != 0) and (blastlat != 0) and distanceSplit:
-         deltakm = distance_on_unit_sphere(blastlat, blastlon, blat, blon) * 6373
+         deltakm = distance_on_unit_sphere(blastlat, blastlon, blat, blon)
          if deltakm > maxDistanceBetweenReadings:
            split.close()
            logCounter+=1
@@ -280,6 +306,7 @@ def splitLogFile(filename, timeSplit, distanceSplit):
 # -----------------------------------------------------------------------------
 # Load bGeigie raw log file
 # -----------------------------------------------------------------------------
+@trace(debugMode)
 def loadLogFile(filename, enableuSv):
   # bGeigie Log format
   # header + id + time + cpm + cp5s + totc + rnStatus + latitude + northsouthindicator + longitude + eastwestindicator + altitude + gpsStatus + dop + quality
@@ -360,7 +387,7 @@ def loadLogFile(filename, enableuSv):
           continue
       # Too far away, skip the reading
       if (blastlon != 0) and (blastlat != 0):
-         deltakm = distance_on_unit_sphere(blastlat, blastlon, blat, blon) * 6373
+         deltakm = distance_on_unit_sphere(blastlat, blastlon, blat, blon)
          if deltakm > maxDistanceBetweenReadings:
             skippedLines["D"].append(lineCounter)
             continue
@@ -402,6 +429,7 @@ def loadLogFile(filename, enableuSv):
 # Based on threads
 # from http://stackoverflow.com/questions/2275924/how-to-get-data-in-a-histogram-bin  
 #      http://stackoverflow.com/questions/8805601/efficiently-create-2d-histograms-from-large-datasets
+@trace(debugMode)
 def rectangularBinNumpy(x_min,y_min,x_max,y_max, data, xbins,ybins=None):
     if (ybins == None): ybins = xbins
     xdata, ydata, cpm = zip(*data)
@@ -533,6 +561,7 @@ def download(url, output):
 # -----------------------------------------------------------------------------
 # Load OSM tiles from an area
 # -----------------------------------------------------------------------------
+@trace(debugMode)
 def loadTiles(lat_min,lon_min,lat_max,lon_max, zoom):
     projection = GoogleProjection()
     gx0 , gy0 = projection.fromLLtoPixel((lon_min, lat_max), zoom) # top right
@@ -592,6 +621,7 @@ def loadTiles(lat_min,lon_min,lat_max,lon_max, zoom):
 # -----------------------------------------------------------------------------
 # Draw final map (tile layer + rectangular binning 100mx100m layer)
 # -----------------------------------------------------------------------------
+@trace(debugMode)
 def drawMap(filename, language, showTitle):
     mapName = os.path.splitext(filename)[0]
     print "Generating %s.png ..." % mapName
@@ -602,35 +632,43 @@ def drawMap(filename, language, showTitle):
       print "No valid data available."
       return []
 
-    owidth = distance_on_unit_sphere(lat.min(),lon.min(),lat.min(),lon.max())*6373
-    oheight = distance_on_unit_sphere(lat.min(),lon.min(),lat.max(),lon.min())*6373
+    owidth = distance_on_unit_sphere(lat.min(),lon.min(),lat.min(),lon.max())
+    oheight = distance_on_unit_sphere(lat.min(),lon.min(),lat.max(),lon.min())
     print "original area %.3f km x %.3f km" % (owidth, oheight)
 
-    #if (lat.min() == lat.max()) or (lon.min() == lon.max()):
-    #   print "No change in readings positions -> skip log file %s" % mapName
-    #   return []
+    # Adjust label size and tiles zoom
+    (zoom, fontsize, labelsize, dpi) = (16, 7, 4, 100)
+
+    scales = scaleTable.keys()
+    scales.sort()
+    scales.reverse()
+    for s in scales:
+      if max(owidth,oheight) < s:
+        continue
+      else:
+       print scaleTable[s]
+       (zoom, fontsize, labelsize, dpi) = (scaleTable[s]["zoom"],scaleTable[s]["font"],scaleTable[s]["label"],scaleTable[s]["dpi"])
+       break
 
     # Add 100m border around the measured area
-    if (lat.min() == lat.max()) or (lon.min() == lon.max()):
-      w100m = 0.0011
-      h100m = 0.0009
-      if (lat.min() == lat.max()):
-        h100m*=1.5
-      if (lon.min() == lon.max()):
-        w100m*=1.5      
+    if (lat.min() == lat.max()):
+      w100m = (lon.max()-lon.min())/(distance_on_unit_sphere(lat.min(),lon.min(),lat.min(),lon.max())/binSize)
+      h100m = 0.0009*1.5
+    elif (lon.min() == lon.max()):
+      w100m = 0.0011*1.5
+      h100m = (lat.max()-lat.min())/(distance_on_unit_sphere(lat.min(),lon.min(),lat.max(),lon.min())/binSize)
     else:
-      w100m = (lon.max()-lon.min())/(distance_on_unit_sphere(lat.min(),lon.min(),lat.min(),lon.max())*(6373/binSize))
-      h100m = (lat.max()-lat.min())/(distance_on_unit_sphere(lat.min(),lon.min(),lat.max(),lon.min())*(6373/binSize))
+      w100m = (lon.max()-lon.min())/(distance_on_unit_sphere(lat.min(),lon.min(),lat.min(),lon.max())/binSize)
+      h100m = (lat.max()-lat.min())/(distance_on_unit_sphere(lat.min(),lon.min(),lat.max(),lon.min())/binSize)
 
-    #print w100m, h100m
     lon_min = lon.min()-borderSize*w100m
     lon_max = lon.max()+borderSize*w100m
     lat_min = lat.min()-borderSize*h100m
     lat_max = lat.max()+borderSize*h100m
 
     # Compute gridsize   
-    width = distance_on_unit_sphere(lat_min,lon_min,lat_min,lon_max)*6373
-    height = distance_on_unit_sphere(lat_min,lon_min,lat_max,lon_min)*6373
+    width = distance_on_unit_sphere(lat_min,lon_min,lat_min,lon_max)
+    height = distance_on_unit_sphere(lat_min,lon_min,lat_max,lon_min)
     print "extended area %.3f km x %.3f km" % (width, height)
     #gridsize = (max(1,int(math.ceil(width/binSize)-borderSize*2)), max(1, int(math.ceil(height/binSize)-borderSize*2))) # 100m x 100m
     gridsize = (max(1,int(math.ceil(width/binSize))), max(1, int(math.ceil(height/binSize)))) # 100m x 100m
@@ -665,26 +703,6 @@ def drawMap(filename, language, showTitle):
                (sLabels["amin"][language], ("%.3f" % altitude.min()).lstrip("0")),
                (sLabels["amax"][language], ("%.3f" % altitude.max()).lstrip("0")),
     ]
-
-    # Adjust label size and tiles zoom
-    zoom = 16
-    fontsize = 7
-    labelsize = 4
-    dpi = 100
-
-    scales = scaleTable.keys()
-    scales.sort()
-    scales.reverse()
-    for s in scales:
-      if max(owidth,oheight) < s:
-        continue
-      else:
-       print scaleTable[s]
-       zoom = scaleTable[s]["zoom"]
-       fontsize = scaleTable[s]["font"]
-       labelsize = scaleTable[s]["label"]
-       dpi = scaleTable[s]["dpi"]
-       break
 
     # Load tiles
     ctilesLon, ctilesLat = loadTiles(lat_min,lon_min,lat_max,lon_max, zoom)
@@ -779,6 +797,7 @@ def firstPage(canvas, doc):
     canvas.setFont("Helvetica", 7)
     canvas.drawString(0.75*pageWidth, pageHeight-1*cm, ("Printed")+": %s" % time)
 
+@trace(debugMode)
 def generatePDFReport(mapName, language, size, legend, statisticTable):
     print "Generating report %s.pdf ..." % mapName
     Story=[]
@@ -842,6 +861,7 @@ def generatePDFReport(mapName, language, size, legend, statisticTable):
 # -----------------------------------------------------------------------------
 # Generate HTML report
 # -----------------------------------------------------------------------------
+@trace(debugMode)
 def generateHTMLReport(mapName, language, statisticTable, skipped):
     htmlMessageHeader = """\
 <html>
