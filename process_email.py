@@ -13,7 +13,7 @@ import datetime, os, sys, traceback
 import ConfigParser
 
 # safecast module
-import bgeigie_report
+from bgeigie_report import processFiles
 
 # email modules
 import smtplib
@@ -237,40 +237,7 @@ if __name__ == '__main__':
 
   if (len(result)):
     sender, filelist, language = result
-
-    reports = []
-    processStatus = []
-    for f in filelist:
-      bgeigie_report.logfile = os.path.basename(f)
-
-      try:
-        # Draw map
-        mapInfo = bgeigie_report.drawMap(f, language, False)
-        if len(mapInfo) == 0:
-           # Wrong file, skip it
-           continue
-        size, legend, statisticTable, skipped = mapInfo
-        # Generate reports
-        bgeigie_report.generatePDFReport(os.path.splitext(f)[0], language, size, legend, statisticTable)
-        bgeigie_report.generateHTMLReport(os.path.splitext(f)[0], language, statisticTable, skipped)
-        processStatus.append((f, sum([len(skipped[e]) for e in skipped.keys()])))
-      except:
-        # Generic trap if something crashed
-        logPrint('-'*60)
-        traceback.print_exc(file=sys.stdout)
-        logPrint('-'*60)
-        processStatus.append((f, -1))
-        continue
-
-      reports.append((os.path.splitext(f)[0]+".html", os.path.splitext(f)[0]+".pdf"))
-
-    # Display a status summary
-    print '='*60
-    print "Log file\tExceptions (-1 = failure)"
-    for s in processStatus:
-      print "%s\t%d" % s
-    print '='*60
-
+    reports = processFiles(filelist, language)
     gmail.send([sender], reports)
 
   print '='*80

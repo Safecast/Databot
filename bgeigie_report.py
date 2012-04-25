@@ -920,6 +920,54 @@ def generateHTMLReport(mapName, language, statisticTable, skipped):
     message = open(mapName+".html", "w")
     message.write(htmlMessage.encode("utf8"))
     message.close()
+
+# -----------------------------------------------------------------------------
+# Process all input log files from fileList
+# -----------------------------------------------------------------------------
+def processFiles(fileList, language):
+    # Split drives if necessary
+    newFiles = []
+    for f in fileList:     
+      newFile = splitLogFile(f, True, False)
+      newFiles += newFile
+
+    # Generate map and report
+    reports = []
+    processStatus = []
+    fileList += newFiles
+    for f in fileList:
+      global logfile
+      logfile = os.path.basename(f)
+
+      try:
+        # Draw map
+        mapInfo = drawMap(f, language, False)
+        if len(mapInfo) == 0:
+           # Wrong file, skip it
+           continue
+        size, legend, statisticTable, skipped = mapInfo
+        # Generate reports
+        generatePDFReport(os.path.splitext(f)[0], language, size, legend, statisticTable)
+        generateHTMLReport(os.path.splitext(f)[0], language, statisticTable, skipped)
+        processStatus.append((f, sum([len(skipped[e]) for e in skipped.keys()])))
+      except:
+        # Generic trap if something crashed
+        logPrint('-'*60)
+        traceback.print_exc(file=sys.stdout)
+        logPrint('-'*60)
+        processStatus.append((f, -1))
+        continue
+
+      reports.append((os.path.splitext(f)[0]+".html", os.path.splitext(f)[0]+".pdf"))
+
+    # Display a status summary
+    print '='*60
+    print "Log file\tExceptions (-1 = failure)"
+    for s in processStatus:
+      print "%s\t%d" % s
+    print '='*60
+
+    return reports
 # -----------------------------------------------------------------------------
 # Main
 # -----------------------------------------------------------------------------
@@ -935,45 +983,7 @@ if __name__ == '__main__':
         parser.error("Wrong number of arguments")
 
     files = glob.glob(args[0])
-
-    # Split drives if necessary
-    newFiles = []
-    for f in files:     
-      newFile = splitLogFile(f, True, False)
-      newFiles += newFile
-
-    # Generate map and report
-    files += newFiles
-    processStatus = []
-    for f in files:
-      global logfile
-      logfile = os.path.basename(f)
-      
-      try:
-        # Draw map
-        mapInfo = drawMap(f, options.language, False)
-        if len(mapInfo) == 0:
-           # Wrong file, skip it
-           continue
-        size, legend, statisticTable, skipped = mapInfo
-        # Generate reports
-        generatePDFReport(os.path.splitext(f)[0], options.language, size, legend, statisticTable)
-        generateHTMLReport(os.path.splitext(f)[0], options.language, statisticTable, skipped)
-        processStatus.append((f, sum([len(skipped[e]) for e in skipped.keys()])))
-      except:
-        # Generic trap if something crashed
-        print '-'*60
-        traceback.print_exc(file=sys.stdout)
-        print '-'*60
-        processStatus.append((f, -1))
-        continue
-    
-    # Display a status summary
-    print '='*60
-    print "Log file\tExceptions (-1 = failure)"
-    for s in processStatus:
-      print "%s\t%d" % s
-    print '='*60
+    processFiles(files, options.language)
      
 
 
