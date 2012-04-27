@@ -312,6 +312,7 @@ def loadLogFile(filename, enableuSv):
   # bGeigie Log format
   # header + id + time + cpm + cp5s + totc + rnStatus + latitude + northsouthindicator + longitude + eastwestindicator + altitude + gpsStatus + dop + quality
 
+  resultDriveId = []
   resultDate = []
   resultReading = []
   resultLat = []
@@ -406,6 +407,7 @@ def loadLogFile(filename, enableuSv):
       continue 
 
     # Store the results
+    resultDriveId.append(s_id)
     resultDate.append(bdate)
     resultReading.append(bcpm)
     resultLat.append(blat)
@@ -426,7 +428,7 @@ def loadLogFile(filename, enableuSv):
 
   print "[LOG] Lines skipped =",skippedLines
 
-  return (resultDate, resultLat, resultLon, resultReading, resultAltitude, totalDose, skippedLines)
+  return (resultDriveId, resultDate, resultLat, resultLon, resultReading, resultAltitude, totalDose, skippedLines)
 
 # -----------------------------------------------------------------------------
 # Compute a rectangular binning from input data (x,y,value)
@@ -631,7 +633,7 @@ def drawMap(mapName, data, language, showTitle):
     print "Generating %s.png ..." % mapName
 
     # Extract data log
-    dt, lat, lon, cpm, altitude, dose, skipped = data
+    did, dt, lat, lon, cpm, altitude, dose, skipped = data
 
     # Original dataset size
     owidth = distance_on_unit_sphere(lat.min(),lon.min(),lat.min(),lon.max())
@@ -859,6 +861,7 @@ def generatePDFReport(mapName, language, size, legend, statisticTable):
     # Render the pdf
     doc.build(Story, onFirstPage=firstPage)
     print "Done."
+    return mapName+".pdf"
 
 # -----------------------------------------------------------------------------
 # Generate HTML report
@@ -921,6 +924,7 @@ def generateHTMLReport(mapName, language, statisticTable, skipped):
     message = open(mapName+".html", "w")
     message.write(htmlMessage.encode("utf8"))
     message.close()
+    return mapName+".html"
 
 # -----------------------------------------------------------------------------
 # Generate KML report
@@ -930,7 +934,7 @@ def generateKMLreport(mapName, data):
     print "Generating KML file %s.kml ..." % mapName
 
     # Extract data log
-    readings = zip(*data[:4])
+    readings = zip(*data[:5])
 
     KMLIconColors = ["white", "midgreen", "green", "lightGreen", "yellow", "orange", "darkOrange", "red", "darkRed", "grey"]
     KMLIconBins = [0, 35, 70, 105, 175, 280, 350, 420, 680, 1050] 
@@ -1144,7 +1148,7 @@ def generateKMLreport(mapName, data):
     kmlfile = open(mapName+".kml", "w")
     kmlfile.write(KMLHeader)
 
-    for dt, lat, lon, usv in readings:
+    for did, dt, lat, lon, usv in readings:
       cpm = int(usv*CPMfactor)
       icolor = np.digitize(np.array([cpm]), KMLIconBins) 
       jpdate = datetime.strptime(dt, '%Y-%m-%dT%H:%M:%SZ') + timedelta(hours=+9) # GMT+9 from Zulu time
@@ -1178,6 +1182,7 @@ def generateKMLreport(mapName, data):
     kmzfile.close()
 
     print "Done."
+    return mapName+".kmz"
 
 # -----------------------------------------------------------------------------
 # Generate GPX report
@@ -1187,7 +1192,7 @@ def generateGPXreport(mapName, data, trackMode):
     print "Generating GPX file %s.gpx ..." % mapName
 
     # Extract data log
-    readings = zip(*data[:5])
+    readings = zip(*data[:6])
     GPXHeader = """<?xml version="1.0" encoding="UTF-8" standalone="no" ?>
 <gpx xmlns="http://www.topografix.com/GPX/1/1" creator="Safecast" version="1.1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.garmin.com/xmlschemas/GpxExtensions/v3 http://www.garmin.com/xmlschemas/GpxExtensions/v3/GpxExtensionsv3.xsd http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd">
 """
@@ -1228,7 +1233,7 @@ def generateGPXreport(mapName, data, trackMode):
     gpxfile.write(GPXHeader)
     if trackMode:
       gpxfile.write(GPXHeaderExtra % originalLogName)
-    for dt, lat, lon, usv, alt in readings:
+    for did, dt, lat, lon, usv, alt in readings:
       if trackMode:
         gpxfile.write(GPXPoint % (lat, lon, alt, dt))
       else:
@@ -1240,13 +1245,37 @@ def generateGPXreport(mapName, data, trackMode):
     gpxfile.close()
 
     print "Done."
+    return mapName+".gpx"
+
+# -----------------------------------------------------------------------------
+# Generate CSV report
+# -----------------------------------------------------------------------------
+@trace(debugMode)
+def generateCSVreport(mapName, data):
+    print "Generating CSV file %s.csv ..." % mapName
+
+    # Extract data log
+    readings = zip(*data[:6])
+    CSVHeader = """# drive id, datetime, CPM, latitude, longitude, altitude
+"""
+
+    csvfile = open(mapName+".csv", "w")
+    csvfile.write(CSVHeader)
+    for did, dt, lat, lon, usv, alt in readings:
+       jpdate = datetime.strptime(dt, '%Y-%m-%dT%H:%M:%SZ') + timedelta(hours=+9) # GMT+9 from Zulu time
+       csvfile.write("%s,%s,%d,%.6f,%.6f,%.1f\n" % (did, jpdate.strftime("%Y-%m-%d %H:%M:%S"), int(usv*CPMfactor), lon, lat, alt))
+    csvfile.close()
+
+    print "Done."
+    return mapName+".csv"
 
 # -----------------------------------------------------------------------------
 # Process all input log files from fileList
 # -----------------------------------------------------------------------------
 @trace(debugMode)
 def processFiles(fileList, options):
-    language, pdfEnabled, kmlEnabled, gpxEnabled = options.language, options.pdf, options.kml, options.gpx
+    language, pdfEnabled, kmlEnabled, gpxEnabled, csvEnabled = (
+          options.language, options.pdf, options.kml, options.gpx, options.csv)
 
     # Split drives if necessary
     newFiles = []
@@ -1263,6 +1292,8 @@ def processFiles(fileList, options):
       logfile = os.path.basename(f)
       logName = os.path.splitext(f)[0]
 
+      attachments = []
+      message = ""
       try:
         # Load data log
         data = loadLogFile(f, True)
@@ -1279,12 +1310,15 @@ def processFiles(fileList, options):
 
         # Generate reports
         if pdfEnabled:
-          generatePDFReport(logName, language, size, legend, statisticTable)
+          attachments.append(generatePDFReport(logName, language, size, legend, statisticTable))
         if kmlEnabled:
-          generateKMLreport(logName, data)
+          attachments.append(generateKMLreport(logName, data))
         if gpxEnabled:
-          generateGPXreport(logName, data, trackMode=False)
-        generateHTMLReport(logName, language, statisticTable, skipped)
+          attachments.append(generateGPXreport(logName, data, trackMode=False))
+        if csvEnabled:
+          attachments.append(generateCSVreport(logName, data))
+
+        message = generateHTMLReport(logName, language, statisticTable, skipped)
         processStatus.append((f, sum([len(skipped[e]) for e in skipped.keys()])))
       except:
         # Generic trap if something crashed
@@ -1294,11 +1328,9 @@ def processFiles(fileList, options):
         processStatus.append((f, -1))
         continue
 
-      # Everything went well, prepare attachment list
-      reports[f] = {"message": logName+".html", "attachments": []}
-      if pdfEnabled: reports[f]["attachments"].append(os.path.splitext(f)[0]+".pdf")
-      if kmlEnabled: reports[f]["attachments"].append(os.path.splitext(f)[0]+".kmz")
-      if gpxEnabled: reports[f]["attachments"].append(os.path.splitext(f)[0]+".gpx")
+      # Prepare attachment list
+      if message != "":
+         reports[f] = {"message": message, "attachments": attachments}
 
     # Display a status summary
     print '='*60
@@ -1325,6 +1357,9 @@ if __name__ == '__main__':
     parser.add_option("-g", "--gpx",
                       action="store_true", dest="gpx", default=False,
                       help="enable GPX report")
+    parser.add_option("-c", "--csv",
+                      action="store_true", dest="csv", default=False,
+                      help="enable CSV report")
 
     (options, args) = parser.parse_args()
     

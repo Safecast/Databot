@@ -117,6 +117,7 @@ class Gmail():
      options.pdf = False
      options.kml = False
      options.gpx = False
+     options.csv = False
      report = 0
      for emailid in items:
          logPrint("[GMAIL] Processing email id %s" % emailid)
@@ -144,6 +145,10 @@ class Gmail():
 
          if mail["Subject"].upper().find("[GPX]") != -1:
            options.gpx = True
+           report += 1
+
+         if mail["Subject"].upper().find("[CSV]") != -1:
+           options.csv = True
            report += 1
 
          # If no special type requested, set to default
