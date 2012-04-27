@@ -14,6 +14,7 @@ from datetime import datetime, timedelta
 from optparse import OptionParser
 import glob
 import tempfile
+import zipfile
 
 # for py2exe binary
 #os.environ['BASEMAPDATA'] = os.path.realpath(os.path.dirname(sys.argv[0]))+"/mpl_toolkits/basemap/data"
@@ -409,8 +410,12 @@ def loadLogFile(filename, enableuSv):
     resultReading.append(bcpm)
     resultLat.append(blat)
     resultLon.append(blon)
-    # Check if altitude is valid
-    if (baltitude > 0) and (baltitude < JP_alt_max):
+    # Check if altitude is valid, clip if necessary
+    if (baltitude < 0):
+      resultAltitude.append(0)
+    elif (baltitude > JP_alt_max):
+      resultAltitude.append(JP_alt_max)
+    else:
       resultAltitude.append(baltitude)
 
   resultLat = np.array(resultLat)
@@ -622,16 +627,13 @@ def loadTiles(lat_min,lon_min,lat_max,lon_max, zoom):
 # Draw final map (tile layer + rectangular binning 100mx100m layer)
 # -----------------------------------------------------------------------------
 @trace(debugMode)
-def drawMap(filename, language, showTitle):
-    mapName = os.path.splitext(filename)[0]
+def drawMap(mapName, data, language, showTitle):
     print "Generating %s.png ..." % mapName
 
-    # Load data log
-    dt, lat, lon, cpm, altitude, dose, skipped = loadLogFile(filename, True)
-    if not len(dt):
-      print "No valid data available."
-      return []
+    # Extract data log
+    dt, lat, lon, cpm, altitude, dose, skipped = data
 
+    # Original dataset size
     owidth = distance_on_unit_sphere(lat.min(),lon.min(),lat.min(),lon.max())
     oheight = distance_on_unit_sphere(lat.min(),lon.min(),lat.max(),lon.min())
     print "original area %.3f km x %.3f km" % (owidth, oheight)
@@ -684,7 +686,7 @@ def drawMap(filename, language, showTitle):
     stopZ = datetime.strptime(dt[-1], '%Y-%m-%dT%H:%M:%SZ')
     start = startZ + timedelta(hours=+9) # GMT+9 from Zulu time
     stop = stopZ + timedelta(hours=+9) # GMT+9 from Zulu time
-    title = "%s\n(%s -> %s)" % (filename, start.strftime("%Y/%m/%d %H:%M"), stop.strftime("%Y/%m/%d %H:%M"))
+    title = "%s\n(%s -> %s)" % (mapName, start.strftime("%Y/%m/%d %H:%M"), stop.strftime("%Y/%m/%d %H:%M"))
     statistics = u"area %.3f km x %.3f km | min %.3f µSv/h, max %.3f µSv/h, avg %.3f µSv/h | dose %.3f µSv" % (width, height, float(cpm.min()), float(cpm.max()), float(cpm.mean()), float(dose))
 
     statTable=[(sLabels["points"][language], len(cpm)),
@@ -902,7 +904,6 @@ def generateHTMLReport(mapName, language, statisticTable, skipped):
   </body>
 </html>
 """
-
     htmlMessage = htmlMessageHeader
 
     htmlMessage += "<h1>%s</h1><table cellspacing='0'>" % sLabels["summary"][language]
@@ -922,9 +923,331 @@ def generateHTMLReport(mapName, language, statisticTable, skipped):
     message.close()
 
 # -----------------------------------------------------------------------------
+# Generate KML report
+# -----------------------------------------------------------------------------
+@trace(debugMode)
+def generateKMLreport(mapName, data):
+    print "Generating KML file %s.kml ..." % mapName
+
+    # Extract data log
+    readings = zip(*data[:4])
+
+    KMLIconColors = ["white", "midgreen", "green", "lightGreen", "yellow", "orange", "darkOrange", "red", "darkRed", "grey"]
+    KMLIconBins = [0, 35, 70, 105, 175, 280, 350, 420, 680, 1050] 
+
+    KMLHeader = """<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document>
+<Style id="grey">
+	<IconStyle>
+		<scale>0.5</scale>
+		<Icon>
+			<href>http://www.safecast.org/kml/grey.png</href>
+		</Icon>
+        </IconStyle>
+	<LabelStyle>
+		<color>00000000</color>
+		<scale>0</scale>
+	</LabelStyle>
+	<PolyStyle>
+		<color>ff000000</color>
+		<outline>0</outline>
+	</PolyStyle>
+</Style>
+<Style id="darkRed">
+	<IconStyle>
+		<scale>0.5</scale>
+		<Icon>
+			<href>http://www.safecast.org/kml/darkRed.png</href>
+		</Icon>
+        </IconStyle>
+	<LabelStyle>
+		<color>00000000</color>
+		<scale>0</scale>
+	</LabelStyle>
+	<PolyStyle>
+		<color>ff000000</color>
+		<outline>0</outline>
+	</PolyStyle>
+</Style>
+<Style id="red">
+	<IconStyle>
+		<scale>0.5</scale>
+		<Icon>
+			<href>http://www.safecast.org/kml/red.png</href>
+		</Icon>
+        </IconStyle>
+	<LabelStyle>
+		<color>00000000</color>
+		<scale>0</scale>
+	</LabelStyle>
+	<PolyStyle>
+		<color>ff000000</color>
+		<outline>0</outline>
+	</PolyStyle>
+</Style>
+<Style id="darkOrange">
+	<IconStyle>
+		<scale>0.5</scale>
+		<Icon>
+			<href>http://www.safecast.org/kml/darkOrange.png</href>
+		</Icon>
+        </IconStyle>
+	<LabelStyle>
+		<color>00000000</color>
+		<scale>0</scale>
+	</LabelStyle>
+	<PolyStyle>
+		<color>ff000000</color>
+		<outline>0</outline>
+	</PolyStyle>
+</Style>
+<Style id="orange">
+	<IconStyle>
+		<scale>0.5</scale>
+		<Icon>
+			<href>http://www.safecast.org/kml/orange.png</href>
+		</Icon>
+        </IconStyle>
+	<LabelStyle>
+		<color>00000000</color>
+		<scale>0</scale>
+	</LabelStyle>
+	<PolyStyle>
+		<color>ff000000</color>
+		<outline>0</outline>
+	</PolyStyle>
+</Style>
+<Style id="yellow">
+	<IconStyle>
+		<scale>0.5</scale>
+		<Icon>
+			<href>http://www.safecast.org/kml/yellow.png</href>
+		</Icon>
+        </IconStyle>
+	<LabelStyle>
+		<color>00000000</color>
+		<scale>0</scale>
+	</LabelStyle>
+	<PolyStyle>
+		<color>ff000000</color>
+		<outline>0</outline>
+	</PolyStyle>
+</Style>
+<Style id="lightGreen">
+	<IconStyle>
+		<scale>0.5</scale>
+		<Icon>
+			<href>http://www.safecast.org/kml/lightGreen.png</href>
+		</Icon>
+        </IconStyle>
+	<LabelStyle>
+		<color>00000000</color>
+		<scale>0</scale>
+	</LabelStyle>
+	<PolyStyle>
+		<color>ff000000</color>
+		<outline>0</outline>
+	</PolyStyle>
+</Style>
+<Style id="green">
+	<IconStyle>
+		<scale>0.5</scale>	
+		<Icon>
+			<href>http://www.safecast.org/kml/green.png</href>
+		</Icon>
+        </IconStyle>
+	<LabelStyle>
+		<color>00000000</color>
+		<scale>0</scale>
+	</LabelStyle>
+	<PolyStyle>
+		<color>ff000000</color>
+		<outline>0</outline>
+	</PolyStyle>
+</Style>
+<Style id="midgreen">
+	<IconStyle>
+		<scale>0.5</scale>
+		<Icon>
+			<href>http://www.safecast.org/kml/midgreen.png</href>
+		</Icon>
+        </IconStyle>
+	<LabelStyle>
+		<color>00000000</color>
+		<scale>0</scale>
+	</LabelStyle>
+	<PolyStyle>
+		<color>ff000000</color>
+		<outline>0</outline>
+	</PolyStyle>
+</Style>
+<Style id="white">
+	<IconStyle>
+		<scale>0.5</scale>
+		<Icon>
+			<href>http://www.safecast.org/kml/white.png</href>
+		</Icon>
+        </IconStyle>
+	<LabelStyle>
+		<color>00000000</color>
+		<scale>0</scale>
+	</LabelStyle>
+	<PolyStyle>
+		<color>ff000000</color>
+		<outline>0</outline>
+	</PolyStyle>
+</Style>
+"""
+    KMLPlacemark = """<Placemark>
+  <name>%.3f uSv/h</name>
+  <description>	
+    <![CDATA[<html xmlns:fo="http://www.w3.org/1999/XSL/Format" xmlns:msxsl="urn:schemas-microsoft-com:xslt">
+    <head>
+    <META http-equiv="Content-Type" content="text/html">
+    </head>
+    <body style="margin:0px 0px 0px 0px;overflow:auto;background:#FFFFFF;">
+    <table style="font-family:Arial,Verdana,Times;font-size:12px;text-align:left;width:300;border-collapse:collapse;padding:3px 3px 3px 3px">
+      <tr style="text-align:center;font-weight:bold;background:#9CBCE2">
+        <td>SAFECAST</td>
+      </tr>
+      <table style="font-family:Arial,Verdana,Times;font-size:12px;text-align:left;width:300;border-spacing:0px; padding:3px 3px 3px 3px">
+         <tr> <td>Name</td> <td>%s</td> </tr>
+         <tr> <td>Current Value</td> <td>%.3f</td> </tr>
+         <tr> <td>CPM Value</td> <td>%d</td> </tr>
+         <tr> <td>Date</td> <td>%s</td> </tr>
+         <tr> <td>Label</td> <td>&#181;Sv/h</td> </tr>
+      </table>
+    </table>
+    </body>
+    </html>]]>
+  </description>
+  <styleUrl>#%s</styleUrl>
+  <Point>
+    <altitudeMode>clampToGround</altitudeMode>
+    <coordinates>%.11f,%.11f</coordinates>
+  </Point>
+</Placemark>
+"""
+    KMLSimplePlaceMark = """  <Placemark>
+    <name>%.3f uSv/h</name>
+    <description>CPM Value = %d\n%s</description>
+    <styleUrl>#%s</styleUrl>
+    <Point>
+      <altitudeMode>clampToGround</altitudeMode>
+      <coordinates>%.11f,%.11f</coordinates>
+    </Point>
+  </Placemark>
+"""
+    KMLFooter = """</Document></kml>"""
+
+    # Create the KML file    
+    originalLogName = os.path.basename(mapName)+".LOG"
+    kmlfile = open(mapName+".kml", "w")
+    kmlfile.write(KMLHeader)
+
+    for dt, lat, lon, usv in readings:
+      cpm = int(usv*CPMfactor)
+      icolor = np.digitize(np.array([cpm]), KMLIconBins) 
+      jpdate = datetime.strptime(dt, '%Y-%m-%dT%H:%M:%SZ') + timedelta(hours=+9) # GMT+9 from Zulu time
+      kmlfile.write(KMLSimplePlaceMark % (usv, int(usv*CPMfactor), jpdate, KMLIconColors[icolor[0]-1], lon, lat))
+      #kmlfile.write(KMLPlacemark % (usv, originalLogName, usv, cpm, jpdate.strftime("%Y/%m/%d %H:%M"), KMLIconColors[icolor[0]-1], lon, lat))
+
+    kmlfile.write(KMLFooter)
+    kmlfile.close()
+
+    # Create the KMZ file
+    kmlfile = open(mapName+".kml", "r")
+    kmzfile = zipfile.ZipFile(mapName+".kmz", "w")
+
+    # Pack the kml file
+    kmlfile = open(mapName+".kml", "r")
+    kmldata = kmlfile.read().replace("http://www.safecast.org/", "")
+    kmlfile.close()
+    zinfo = zipfile.ZipInfo(os.path.basename(mapName)+".kml")
+    zinfo.compress_type = zipfile.ZIP_DEFLATED
+    kmzfile.writestr(zinfo,kmldata)
+
+    # Pack the icons and embbed them in kmz
+    icons = glob.glob(dataFolder+"/icons/*.png")
+    for i in icons:
+       iconfile = open(i, "r")
+       zinfo = zipfile.ZipInfo("kml/"+os.path.basename(i))
+       zinfo.compress_type = zipfile.ZIP_DEFLATED
+       kmzfile.writestr(zinfo,iconfile.read())
+       iconfile.close()
+
+    kmzfile.close()
+
+    print "Done."
+
+# -----------------------------------------------------------------------------
+# Generate GPX report
+# -----------------------------------------------------------------------------
+@trace(debugMode)
+def generateGPXreport(mapName, data, trackMode):
+    print "Generating GPX file %s.gpx ..." % mapName
+
+    # Extract data log
+    readings = zip(*data[:5])
+    GPXHeader = """<?xml version="1.0" encoding="UTF-8" standalone="no" ?>
+<gpx xmlns="http://www.topografix.com/GPX/1/1" creator="Safecast" version="1.1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.garmin.com/xmlschemas/GpxExtensions/v3 http://www.garmin.com/xmlschemas/GpxExtensions/v3/GpxExtensionsv3.xsd http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd">
+"""
+    GPXHeaderExtra = """  <trk>
+    <name>%s</name>
+    <extensions>
+      <gpxx:TrackExtension xmlns:gpxx="http://www.garmin.com/xmlschemas/GpxExtensions/v3">
+        <gpxx:DisplayColor>Transparent</gpxx:DisplayColor>
+      </gpxx:TrackExtension>
+    </extensions>
+    <trkseg>
+"""
+    GPXPoint = """      <trkpt lat="%f" lon="%f">
+        <ele>%.3f</ele>
+        <time>%s</time>
+      </trkpt>
+"""
+    GPXWayPoint = """  <wpt lat="%f" lon="%f">
+    <ele>%f</ele>
+    <name>%.3f uSv/h</name>
+    <time>%s</time>
+    <desc>Current Value = %.3f, CPM Value = %d</desc>
+    <sym>Flag</sym>
+    <extensions>
+      <gpxx:WaypointExtension xmlns:gpxx="http://www.garmin.com/xmlschemas/GpxExtensions/v3">
+        <gpxx:DisplayMode>SymbolAndName</gpxx:DisplayMode>
+      </gpxx:WaypointExtension>
+    </extensions>
+  </wpt>
+"""
+    GPXFooterExtra = """    </trkseg>
+  </trk>
+"""
+    GPXFooter = """</gpx>"""
+
+    originalLogName = os.path.basename(mapName)+".LOG"
+    gpxfile = open(mapName+".gpx", "w")
+    gpxfile.write(GPXHeader)
+    if trackMode:
+      gpxfile.write(GPXHeaderExtra % originalLogName)
+    for dt, lat, lon, usv, alt in readings:
+      if trackMode:
+        gpxfile.write(GPXPoint % (lat, lon, alt, dt))
+      else:
+        gpxfile.write(GPXWayPoint % (lat, lon, alt, usv, dt, usv, int(usv*CPMfactor)))
+
+    if trackMode:
+      gpxfile.write(GPXFooterExtra)
+    gpxfile.write(GPXFooter)
+    gpxfile.close()
+
+    print "Done."
+
+# -----------------------------------------------------------------------------
 # Process all input log files from fileList
 # -----------------------------------------------------------------------------
-def processFiles(fileList, language):
+@trace(debugMode)
+def processFiles(fileList, options):
+    language, pdfEnabled, kmlEnabled, gpxEnabled = options.language, options.pdf, options.kml, options.gpx
+
     # Split drives if necessary
     newFiles = []
     for f in fileList:     
@@ -932,23 +1255,36 @@ def processFiles(fileList, language):
       newFiles += newFile
 
     # Generate map and report
-    reports = []
+    reports = {}
     processStatus = []
     fileList += newFiles
     for f in fileList:
       global logfile
       logfile = os.path.basename(f)
+      logName = os.path.splitext(f)[0]
 
       try:
+        # Load data log
+        data = loadLogFile(f, True)
+        if not len(data[0]):
+          print "No valid data available."
+          continue
+
         # Draw map
-        mapInfo = drawMap(f, language, False)
+        mapInfo = drawMap(logName, data, language, False)
         if len(mapInfo) == 0:
            # Wrong file, skip it
            continue
         size, legend, statisticTable, skipped = mapInfo
+
         # Generate reports
-        generatePDFReport(os.path.splitext(f)[0], language, size, legend, statisticTable)
-        generateHTMLReport(os.path.splitext(f)[0], language, statisticTable, skipped)
+        if pdfEnabled:
+          generatePDFReport(logName, language, size, legend, statisticTable)
+        if kmlEnabled:
+          generateKMLreport(logName, data)
+        if gpxEnabled:
+          generateGPXreport(logName, data, trackMode=False)
+        generateHTMLReport(logName, language, statisticTable, skipped)
         processStatus.append((f, sum([len(skipped[e]) for e in skipped.keys()])))
       except:
         # Generic trap if something crashed
@@ -958,7 +1294,11 @@ def processFiles(fileList, language):
         processStatus.append((f, -1))
         continue
 
-      reports.append((os.path.splitext(f)[0]+".html", os.path.splitext(f)[0]+".pdf"))
+      # Everything went well, prepare attachment list
+      reports[f] = {"message": logName+".html", "attachments": []}
+      if pdfEnabled: reports[f]["attachments"].append(os.path.splitext(f)[0]+".pdf")
+      if kmlEnabled: reports[f]["attachments"].append(os.path.splitext(f)[0]+".kmz")
+      if gpxEnabled: reports[f]["attachments"].append(os.path.splitext(f)[0]+".gpx")
 
     # Display a status summary
     print '='*60
@@ -976,6 +1316,15 @@ if __name__ == '__main__':
     parser.add_option("-l", "--language", 
                       type=str, dest="language", default="jp",
                       help="specify the default language (default jp)")
+    parser.add_option("-p", "--pdf",
+                      action="store_true", dest="pdf", default=False,
+                      help="enable PDF report")
+    parser.add_option("-k", "--kml",
+                      action="store_true", dest="kml", default=False,
+                      help="enable KML report")
+    parser.add_option("-g", "--gpx",
+                      action="store_true", dest="gpx", default=False,
+                      help="enable GPX report")
 
     (options, args) = parser.parse_args()
     
@@ -983,7 +1332,7 @@ if __name__ == '__main__':
         parser.error("Wrong number of arguments")
 
     files = glob.glob(args[0])
-    processFiles(files, options.language)
+    processFiles(files, options)
      
 
 

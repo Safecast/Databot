@@ -31,6 +31,16 @@ import zipfile
 # -----------------------------------------------------------------------------
 def logPrint(message):
    print datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), message
+   
+# -----------------------------------------------------------------------------
+# Simple options object (compatible with OptionParser)
+# -----------------------------------------------------------------------------
+class Options:
+    attr = {}
+    def __setitem__(self, key, value):
+       self.attr[key] = value
+    def __getitem__(self, key):
+       return self.attr[key]
 
 # -----------------------------------------------------------------------------
 # Gmail class for fetching and sending emails
@@ -102,6 +112,12 @@ class Gmail():
      items = items[:1] # only one by one
 
      result = []
+     options = Options()
+     options.language = "jp"
+     options.pdf = False
+     options.kml = False
+     options.gpx = False
+     report = 0
      for emailid in items:
          logPrint("[GMAIL] Processing email id %s" % emailid)
          resp, data = m.fetch(emailid, "(RFC822)") # fetching the mail
@@ -110,14 +126,31 @@ class Gmail():
 
          # Check if any attachments at all
          if mail.get_content_maintype() != 'multipart':
-             continue
+           continue
 
          logPrint("[GMAIL] ["+mail["From"]+"] :" + mail["Subject"])
 
-         if mail["Subject"].find("[en]") != -1:
-          language = "en"
-         else:
-          language = "jp"
+         # Check subject for any requests
+         if mail["Subject"].upper().find("[EN]") != -1:
+           options.language = "en"
+
+         if mail["Subject"].upper().find("[PDF]") != -1:
+           options.pdf = True
+           report += 1
+
+         if mail["Subject"].upper().find("[KML]") != -1:
+           options.kml = True
+           report += 1
+
+         if mail["Subject"].upper().find("[GPX]") != -1:
+           options.gpx = True
+           report += 1
+
+         # If no special type requested, set to default
+         if not report:
+           options.pdf = True
+           options.kml = True
+
          sender = mail["From"]
 
          # Mark as read
@@ -174,7 +207,7 @@ class Gmail():
              else:
                 filelist.append(att_path)
 
-         result = [sender, filelist, language]
+         result = [sender, filelist, options]
 
      logPrint("[GMAIL] Done.")
      return result
@@ -186,21 +219,24 @@ class Gmail():
      self.recipients = recipients      
      self.files = files
 
-     for h,pdf in self.files:
+     for report in self.files:
        try:
+         summary = self.files[report]["message"]
          # Multipart emails
          msg = self._createMessage(
-             'SAFECAST Radiation Survey Summary Map (%s)' % os.path.basename(pdf))
+             'SAFECAST Radiation Survey Summary Map (%s)' % os.path.basename(report))
 
          logPrint("[GMAIL] "+msg['Subject'])
 
          # Add html email message
-         html = self._attachHTML(h)
+         html = self._attachHTML(summary)
          msg.attach(html)
 
-         # Add report pdf attachment
-         report = self._attachFile(pdf)
-         msg.attach(report)
+         # Add report attachments
+         for f in self.files[report]["attachments"]:
+            logPrint("[GMAIL] - "+f)
+            report = self._attachFile(f)
+            msg.attach(report)
 
          # Send the email via our own SMTP server.
          logPrint("[GMAIL] Sending the email ...")
@@ -236,8 +272,8 @@ if __name__ == '__main__':
   result = gmail.fetch("logs")
 
   if (len(result)):
-    sender, filelist, language = result
-    reports = processFiles(filelist, language)
+    sender, filelist, options = result
+    reports = processFiles(filelist, options)
     gmail.send([sender], reports)
 
   print '='*80
