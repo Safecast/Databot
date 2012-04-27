@@ -930,7 +930,7 @@ def generateHTMLReport(mapName, language, statisticTable, skipped):
 # Generate KML report
 # -----------------------------------------------------------------------------
 @trace(debugMode)
-def generateKMLreport(mapName, data):
+def generateKMLreport(mapName, data, useZipExtension = False):
     print "Generating KML file %s.kml ..." % mapName
 
     # Extract data log
@@ -1152,15 +1152,19 @@ def generateKMLreport(mapName, data):
       cpm = int(usv*CPMfactor)
       icolor = np.digitize(np.array([cpm]), KMLIconBins) 
       jpdate = datetime.strptime(dt, '%Y-%m-%dT%H:%M:%SZ') + timedelta(hours=+9) # GMT+9 from Zulu time
-      kmlfile.write(KMLSimplePlaceMark % (usv, int(usv*CPMfactor), jpdate, KMLIconColors[icolor[0]-1], lon, lat))
-      #kmlfile.write(KMLPlacemark % (usv, originalLogName, usv, cpm, jpdate.strftime("%Y/%m/%d %H:%M"), KMLIconColors[icolor[0]-1], lon, lat))
+      kmlfile.write(KMLSimplePlaceMark % (usv, int(usv*CPMfactor), jpdate.strftime("%Y/%m/%d %H:%M:%S"), KMLIconColors[icolor[0]-1], lon, lat))
+      #kmlfile.write(KMLPlacemark % (usv, originalLogName, usv, cpm, jpdate.strftime("%Y/%m/%d %H:%M:%S"), KMLIconColors[icolor[0]-1], lon, lat))
 
     kmlfile.write(KMLFooter)
     kmlfile.close()
 
     # Create the KMZ file
+    if useZipExtension:
+      kmzExtension = ".zip"
+    else:
+      kmzExtension = ".kmz"
     kmlfile = open(mapName+".kml", "r")
-    kmzfile = zipfile.ZipFile(mapName+".kmz", "w")
+    kmzfile = zipfile.ZipFile(mapName + kmzExtension, "w")
 
     # Pack the kml file
     kmlfile = open(mapName+".kml", "r")
@@ -1182,13 +1186,13 @@ def generateKMLreport(mapName, data):
     kmzfile.close()
 
     print "Done."
-    return mapName+".kmz"
+    return mapName+kmzExtension
 
 # -----------------------------------------------------------------------------
 # Generate GPX report
 # -----------------------------------------------------------------------------
 @trace(debugMode)
-def generateGPXreport(mapName, data, trackMode):
+def generateGPXreport(mapName, data, trackMode = True):
     print "Generating GPX file %s.gpx ..." % mapName
 
     # Extract data log
@@ -1312,7 +1316,7 @@ def processFiles(fileList, options):
         if pdfEnabled:
           attachments.append(generatePDFReport(logName, language, size, legend, statisticTable))
         if kmlEnabled:
-          attachments.append(generateKMLreport(logName, data))
+          attachments.append(generateKMLreport(logName, data, useZipExtension = True))
         if gpxEnabled:
           attachments.append(generateGPXreport(logName, data, trackMode=False))
         if csvEnabled:
