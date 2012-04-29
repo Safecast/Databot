@@ -277,7 +277,6 @@ def splitLogFile(filename, timeSplit, distanceSplit):
       blat = ((blat-int(blat))/60)*100+int(blat)
       # Outside Japan, skip the reading
       if (blat < JP_lat_min) or (blat > JP_lat_max) or (blon < JP_lon_min) or (blon > JP_lon_max):
-          skippedLines["O"].append(lineCounter)
           split.write("%s" % line)
           continue
       # Too far away, split the reading
@@ -454,10 +453,10 @@ def rectangularBinNumpy(x_min,y_min,x_max,y_max, data, xbins,ybins=None):
     dLat = np.digitize(ydata, binsLat) 
     
     def centerbin(x,y):
-     # Compute bin center position for labels
-     cx = int(x*xSize+xSize/2)
-     cy = int(y*ySize+ySize/2)
-     return (cx,cy)
+      # Compute bin center position for labels
+      cx = int(x*xSize+xSize/2)
+      cy = int(y*ySize+ySize/2)
+      return (cx,cy)
 
     # Initialize dictionaries
     hist = [[0.0 for x in xrange(xbins)] for y in xrange(ybins)]
@@ -1267,7 +1266,7 @@ def generateCSVreport(mapName, data):
     csvfile.write(CSVHeader)
     for did, dt, lat, lon, usv, alt in readings:
        jpdate = datetime.strptime(dt, '%Y-%m-%dT%H:%M:%SZ') + timedelta(hours=+9) # GMT+9 from Zulu time
-       csvfile.write("%s,%s,%d,%.6f,%.6f,%.1f\n" % (did, jpdate.strftime("%Y-%m-%d %H:%M:%S"), int(usv*CPMfactor), lon, lat, alt))
+       csvfile.write("%s,%s,%d,%.6f,%.6f,%.1f\n" % (did, jpdate.strftime("%Y-%m-%d %H:%M:%S"), int(usv*CPMfactor), lat, lon, alt))
     csvfile.close()
 
     print "Done."
