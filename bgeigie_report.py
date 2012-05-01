@@ -134,6 +134,7 @@ scaleTable = {
 # -----------------------------------------------------------------------------
 def logPrint(message):
    print datetime.now().strftime("%Y-%m-%d %H:%M:%S"), message
+
 # -----------------------------------------------------------------------------
 # Debug decorator
 # -----------------------------------------------------------------------------
@@ -155,6 +156,7 @@ def trace( debug ):
        else:
          return aFunc
     return concreteDescriptor
+
 # -----------------------------------------------------------------------------
 # Compute distance between two geographic positions
 # -----------------------------------------------------------------------------
@@ -191,6 +193,23 @@ def distance_on_unit_sphere(lat1, long1, lat2, long2):
   except:
     return 0
 
+# -----------------------------------------------------------------------------
+# Compute latitude/longitude offset
+# -----------------------------------------------------------------------------
+# http://gis.stackexchange.com/questions/2951/algorithm-for-offsetting-a-latitude-longitude-by-some-amount-of-meters
+def offset_on_unit_sphere(lat, sizeInMeter):
+    # Earth's radius, sphere
+    R = 6378137
+
+    # Offsets in meters
+    dn = sizeInMeter
+    de = sizeInMeter
+
+    #Coordinate offsets in radians
+    dLat = (dn/R) * 180/math.pi
+    dLon = (de/(R*math.cos(math.pi*lat/180))) * 180/math.pi
+
+    return (dLat, dLon)
 
 # -----------------------------------------------------------------------------
 # Compute minutes difference between two datetime
@@ -654,20 +673,13 @@ def drawMap(mapName, data, language, showTitle):
        break
 
     # Add 100m border around the measured area
-    w100m = (lon.max()-lon.min())/(distance_on_unit_sphere(lat.min(),lon.min(),lat.min(),lon.max())/binSize)
-    h100m = (lat.max()-lat.min())/(distance_on_unit_sphere(lat.min(),lon.min(),lat.max(),lon.min())/binSize)
-    if (not oheight):
-      h100m = 0.0009*1.5
-    if (not owidth):
-      w100m = 0.0011*1.5
-    
+    h100m, w100m = offset_on_unit_sphere((lat.min()+lat.max())/2,binSize*1000)
+    if (not owidth): w100m *= 1.5
+    if (not oheight): h100m *= 1.5
     lon_min = lon.min()-borderSize*w100m
     lon_max = lon.max()+borderSize*w100m
     lat_min = lat.min()-borderSize*h100m
     lat_max = lat.max()+borderSize*h100m
-
-    print lat.min(),lon.min(),lat.max(),lon.max()
-    print lat_min,lon_min,lat_max,lon_max, len(cpm)
 
     # Compute gridsize   
     width = distance_on_unit_sphere(lat_min,lon_min,lat_min,lon_max)
