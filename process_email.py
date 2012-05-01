@@ -183,12 +183,10 @@ class Gmail():
              logPrint("[GMAIL]  - Fetching %s" % filename)
              att_path = os.path.join(self.folder, filename)
 
-             # Check if its already there
-             if not os.path.isfile(att_path) :
-                 # Write the attachment
-                 fp = open(att_path, 'wb')
-                 fp.write(part.get_payload(decode=True))
-                 fp.close()
+             # Write the attachment
+             fp = open(att_path, 'wb')
+             fp.write(part.get_payload(decode=True))
+             fp.close()
 
              if os.path.splitext(filename)[1] != ".LOG":
                 logPrint("Check for attached zip file ...")

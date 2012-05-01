@@ -654,20 +654,20 @@ def drawMap(mapName, data, language, showTitle):
        break
 
     # Add 100m border around the measured area
-    if (lat.min() == lat.max()):
-      w100m = (lon.max()-lon.min())/(distance_on_unit_sphere(lat.min(),lon.min(),lat.min(),lon.max())/binSize)
+    w100m = (lon.max()-lon.min())/(distance_on_unit_sphere(lat.min(),lon.min(),lat.min(),lon.max())/binSize)
+    h100m = (lat.max()-lat.min())/(distance_on_unit_sphere(lat.min(),lon.min(),lat.max(),lon.min())/binSize)
+    if (not oheight):
       h100m = 0.0009*1.5
-    elif (lon.min() == lon.max()):
+    if (not owidth):
       w100m = 0.0011*1.5
-      h100m = (lat.max()-lat.min())/(distance_on_unit_sphere(lat.min(),lon.min(),lat.max(),lon.min())/binSize)
-    else:
-      w100m = (lon.max()-lon.min())/(distance_on_unit_sphere(lat.min(),lon.min(),lat.min(),lon.max())/binSize)
-      h100m = (lat.max()-lat.min())/(distance_on_unit_sphere(lat.min(),lon.min(),lat.max(),lon.min())/binSize)
-
+    
     lon_min = lon.min()-borderSize*w100m
     lon_max = lon.max()+borderSize*w100m
     lat_min = lat.min()-borderSize*h100m
     lat_max = lat.max()+borderSize*h100m
+
+    print lat.min(),lon.min(),lat.max(),lon.max()
+    print lat_min,lon_min,lat_max,lon_max, len(cpm)
 
     # Compute gridsize   
     width = distance_on_unit_sphere(lat_min,lon_min,lat_min,lon_max)
