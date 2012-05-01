@@ -117,6 +117,7 @@ sLabels = {
   "skipped"  : {"en": "Lines skipped from the log", "jp": u"無効なデータ列"},
   "legend"  : {"en": "The readings are averaged over 100m x 100m squares", "jp": u"測定値は平均100m四方"},
   "question" : {"en": "In case of any question or trouble, please contact <a href='mailto:data@safecast.org'>data@safecast.org</a>", "jp": u"何らかの質問あるいは問題の場合には、<a href='mailto:data@safecast.org'>data@safecast.org</a>と連絡をとってください。"},
+  "readme": {"en": "In the subject line of your email, type in these tags: [en] for English mode, [pdf] for PDF report, [kml] for KML report, [gpx] for GPX report and [csv] for CSV report (default is [pdf][kml])", "jp": u"メールの件名には、必要に応じて、次のタグを入力してください: 英語での返信を希望する場合は[en]、要約表のPDF版を希望する場合は[pdf]、KML版を希望する場合は[kml]、GPX版を希望する場合は[gpx]、CSV版を希望する場合は[csv] （既定値は、[pdf] [kml] となっています。）"},
 }
 
 # Map scale table: area size in km -> (OSM zoom level, font size, label length, dpi)
@@ -205,7 +206,7 @@ def offset_on_unit_sphere(lat, sizeInMeter):
     dn = sizeInMeter
     de = sizeInMeter
 
-    #Coordinate offsets in radians
+    # Coordinate offsets in radians
     dLat = (dn/R) * 180/math.pi
     dLon = (de/(R*math.cos(math.pi*lat/180))) * 180/math.pi
 
@@ -930,6 +931,7 @@ def generateHTMLReport(mapName, language, statisticTable, skipped):
       htmlMessage += "%s: %s" % (sLabels["skipped"][language], ", ".join(sum([[str(x)+y for x in skipped[y]] for y in skipped.keys()], [])))
 
     htmlMessage += "<br>%s" % (sLabels["question"][language])
+    htmlMessage += "<br><br>%s" % (sLabels["readme"][language])    
     htmlMessage += htmlMessageFooter
 
     message = open(mapName+".html", "w")
