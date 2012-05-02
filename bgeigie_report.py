@@ -832,7 +832,9 @@ def generatePDFReport(mapName, language, size, legend, statisticTable):
 
     doc = SimpleDocTemplate(mapName+".pdf",pagesize=pdfPageSize,
                         rightMargin=10,leftMargin=10,
-                        topMargin=10,bottomMargin=10)
+                        topMargin=10,bottomMargin=10,
+                        title='SAFECAST Radiation Survey Summary Map (%s.LOG)' % os.path.basename(mapName),
+                        author='Safecast')
 
     styles=getSampleStyleSheet()
     styles.add(ParagraphStyle(name='Justify', alignment=TA_JUSTIFY))
