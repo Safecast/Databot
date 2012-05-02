@@ -117,7 +117,7 @@ sLabels = {
   "skipped"  : {"en": "Lines skipped from the log", "jp": u"無効なデータ列"},
   "legend"  : {"en": "The readings are averaged over 100m x 100m squares", "jp": u"測定値は平均100m四方"},
   "question" : {"en": "In case of any question or trouble, please contact <a href='mailto:data@safecast.org'>data@safecast.org</a>", "jp": u"何らかの質問あるいは問題の場合には、<a href='mailto:data@safecast.org'>data@safecast.org</a>と連絡をとってください。"},
-  "readme": {"en": "In the subject line of your email, type in these tags: [en] for English mode, [pdf] for PDF report, [kml] for KML report, [gpx] for GPX report and [csv] for CSV report (default is [pdf][kml])", "jp": u"メールの件名には、必要に応じて、次のタグを入力してください: 英語での返信を希望する場合は[en]、要約表のPDF版を希望する場合は[pdf]、KML版を希望する場合は[kml]、GPX版を希望する場合は[gpx]、CSV版を希望する場合は[csv] （既定値は、[pdf] [kml] となっています。）"},
+  "readme": {"en": "In the subject line of your email, type in these tags: <b>[en]</b> for English mode, <b>[pdf]</b> for PDF report, <b>[kml]</b> for KML report, <b>[gpx]</b> for GPX report and <b>[csv]</b> for CSV report (default is <b>[pdf]</b><b>[kml]</b>)", "jp": u"メールの件名には、必要に応じて、次のタグを入力してください: 英語での返信を希望する場合は<b>[en]</b>、要約表のPDF版を希望する場合は<b>[pdf]</b>、KML版を希望する場合は<b>[kml]</b>、GPX版を希望する場合は<b>[gpx]</b>、CSV版を希望する場合は<b>[csv]</b> （既定値は、<b>[pdf]</b> <b>[kml]</b> となっています。）"},
 }
 
 # Map scale table: area size in km -> (OSM zoom level, font size, label length, dpi)
