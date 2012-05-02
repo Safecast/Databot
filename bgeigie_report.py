@@ -928,9 +928,10 @@ def generateHTMLReport(mapName, language, statisticTable, skipped):
        htmlMessage += "<tr><th align='left'>%s</th><td>%s</td></tr>" % (e[0], e[1])
     htmlMessage += "</table>"
 
-    if len(skipped):
+    issues = sum([[str(x)+y for x in skipped[y]] for y in skipped.keys()], [])
+    if len(issues):
       htmlMessage += "<h1>%s</h1>" % sLabels["error"][language]
-      htmlMessage += "%s: %s" % (sLabels["skipped"][language], ", ".join(sum([[str(x)+y for x in skipped[y]] for y in skipped.keys()], [])))
+      htmlMessage += "%s: %s" % (sLabels["skipped"][language], ", ".join(issues))
 
     htmlMessage += "<br>%s" % (sLabels["question"][language])
     htmlMessage += "<br><br>%s" % (sLabels["readme"][language])    
