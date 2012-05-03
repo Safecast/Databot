@@ -2,7 +2,7 @@
 
 Safecast tool to convert bGeigie logs to static pdf maps
 
-<img src=https://github.com/bidouilles/SafecastLog2Pdf/blob/master/samples/screenshot.jpg" alt="Scheenshot" title="Scheenshot" align="center" />
+<img src="https://github.com/bidouilles/SafecastLog2Pdf/blob/master/samples/screenshot.jpg" alt="Scheenshot" title="Scheenshot" align="center" />
 
 ## Requirements
 
@@ -43,6 +43,7 @@ The settings for the email account are stored in `.safecast.conf` file.
 ### Usage
 
 It can be embedded in a bash script like
+
     #!/bin/bash
     while true; do
       /opt/safecast/process_email.py
@@ -50,6 +51,7 @@ It can be embedded in a bash script like
     done
 
 or schedule with cron in a crontab like
+
     */5     *      *     *    *    /opt/safecast/process_mail.py
 
 ### License
