@@ -112,6 +112,7 @@ sLabels = {
   "amax"  : {"en": "Highest altitude (m)", "jp": u"最高高度（m）"},
   "aavg"  : {"en": "Average altitude (m)", "jp": u"平均高度（m）"},
   "amin"  : {"en": "Lowest altitude (m)", "jp": u"最低高度（m）"},
+  "model"  : {"en": "Model", "jp": u"モデル名"},
   "summary"  : {"en": "Summary table", "jp": u"要約表"},
   "error"  : {"en": "Exceptions", "jp": u"例外"},
   "skipped"  : {"en": "Lines skipped from the log", "jp": u"無効なデータ列"},
@@ -338,6 +339,9 @@ def loadLogFile(filename, enableuSv):
   resultLon = []
   resultAltitude = []
   totalDose = 0
+  
+  bgeigieModel = ""
+  bgeigieVersion = ""
 
   # Load the bGeigie log file
   bg = open(filename, "r")
@@ -359,11 +363,18 @@ def loadLogFile(filename, enableuSv):
   
   for line in lines:
     lineCounter += 1
-    if line[0] == "#": continue # ignore comments
+    if line[0] == "#": 
+      if line.find("format=") != -1:
+         # Grab bgeigie version
+         bgeigieVersion=line[line.find("format=")+7:].strip()
+      continue # ignore comments
     data = line.split(",")
 
     # Check for bGeigieMini or bGeigie
     if data[0] == "$BMRDD" or data[0] == "$BGRDD":
+      if bgeigieModel == "":
+         if data[0] == "$BMRDD": bgeigieModel = "bGeigieMini"
+         elif data[0] == "$BGRDD": bgeigieModel = "bGeigie"
       if len(data) != 15 or data[6] != "A":
          skippedLines["U"].append(lineCounter)
          continue
@@ -444,10 +455,16 @@ def loadLogFile(filename, enableuSv):
   resultReading = np.array(resultReading)
   resultAltitude = np.array(resultAltitude)
   if enableuSv: totalDose /= CPMfactor
+  
+  # Get the bgeigie model
+  if (bgeigieModel != ""):
+    model = "%s %s" % (bgeigieModel, bgeigieVersion)
+  else:
+    model = ""
 
   print "[LOG] Lines skipped =",skippedLines
-
-  return (resultDriveId, resultDate, resultLat, resultLon, resultReading, resultAltitude, totalDose, skippedLines)
+  
+  return (resultDriveId, resultDate, resultLat, resultLon, resultReading, resultAltitude, totalDose, skippedLines, model)
 
 # -----------------------------------------------------------------------------
 # Compute a rectangular binning from input data (x,y,value)
@@ -652,7 +669,7 @@ def drawMap(mapName, data, language, showTitle):
     print "Generating %s.png ..." % mapName
 
     # Extract data log
-    did, dt, lat, lon, cpm, altitude, dose, skipped = data
+    did, dt, lat, lon, cpm, altitude, dose, skipped, model = data
 
     # Original dataset size
     owidth = distance_on_unit_sphere(lat.min(),lon.min(),lat.min(),lon.max())
@@ -717,8 +734,11 @@ def drawMap(mapName, data, language, showTitle):
 #               ("Total dose (µSv)", ("%.3f" % dose).lstrip("0")),
                (sLabels["aavg"][language], ("%.3f" % altitude.mean()).lstrip("0")),
                (sLabels["amin"][language], ("%.3f" % altitude.min()).lstrip("0")),
-               (sLabels["amax"][language], ("%.3f" % altitude.max()).lstrip("0")),
+               (sLabels["amax"][language], ("%.3f" % altitude.max()).lstrip("0")),       
     ]
+    
+    if model != "":
+      statTable+=[(sLabels["model"][language], ("%s" % model))]
 
     # Load tiles
     ctilesLon, ctilesLat = loadTiles(lat_min,lon_min,lat_max,lon_max, zoom)
