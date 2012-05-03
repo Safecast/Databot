@@ -934,7 +934,8 @@ def generateHTMLReport(mapName, language, statisticTable, skipped):
       htmlMessage += "%s: %s" % (sLabels["skipped"][language], ", ".join(issues))
 
     htmlMessage += "<br>%s" % (sLabels["question"][language])
-    htmlMessage += "<br><br>%s" % (sLabels["readme"][language])    
+    htmlMessage += "<br><br>%s" % (sLabels["readme"][language])
+    htmlMessage += "<br>%s" % (sLabels["readme"]["en" if (language=="jp") else "jp"])   
     htmlMessage += htmlMessageFooter
 
     message = open(mapName+".html", "w")
