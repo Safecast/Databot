@@ -888,34 +888,41 @@ def generateHTMLReport(mapName, language, statisticTable, skipped):
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/> 
     <style type="text/css">
      h1 {
-	font: bold 18px "Trebuchet MS", Verdana, Arial, Helvetica,
-	sans-serif;
+	   font: bold 18px "Trebuchet MS", Verdana, Arial, Helvetica,
+	   sans-serif;
      }
      
      body {
-        font: 12px "Trebuchet MS", Verdana, Arial, Helvetica,
-	sans-serif;
+       font: 12px "Trebuchet MS", Verdana, Arial, Helvetica,
+	   sans-serif;
      }
 
      td {
-	border: 1px solid #C1DAD7;
-	background: #fff;
-	padding: 6px 6px 6px 12px;
-	font: 12px "Trebuchet MS", Verdana, Arial, Helvetica,
-	sans-serif;
+	   border: 1px solid #C1DAD7;
+	   background: #fff;
+	   padding: 6px 6px 6px 12px;
+	   font: 12px "Trebuchet MS", Verdana, Arial, Helvetica,
+	   sans-serif;
      }
 
      th {
-	border: 1px solid #C1DAD7;
-	background: #fff;
-	padding: 6px 6px 6px 12px;
-	font: bold 12px "Trebuchet MS", Verdana, Arial, Helvetica,
-	sans-serif;
+	   border: 1px solid #C1DAD7;
+	   background: #fff;
+	   padding: 6px 6px 6px 12px;
+	   font: bold 12px "Trebuchet MS", Verdana, Arial, Helvetica,
+	   sans-serif;
+     }
+     
+     #InfoLayer {
+       background-color: #F0F0F0;
+       border-radius: 5px 5px 5px 5px;
+       padding: 10px;
+       border-style: solid;
+       border-width: 1px;
      }
     </style>
   </head>
   <body>
-
 """
     htmlMessageFooter = """
   </body>
@@ -923,7 +930,7 @@ def generateHTMLReport(mapName, language, statisticTable, skipped):
 """
     htmlMessage = htmlMessageHeader
 
-    htmlMessage += "<h1>%s</h1><table cellspacing='0'>" % sLabels["summary"][language]
+    htmlMessage += "    <h1>%s</h1><table cellspacing='0'>" % sLabels["summary"][language]
     for e in statisticTable:
        htmlMessage += "<tr><th align='left'>%s</th><td>%s</td></tr>" % (e[0], e[1])
     htmlMessage += "</table>"
@@ -934,8 +941,10 @@ def generateHTMLReport(mapName, language, statisticTable, skipped):
       htmlMessage += "%s: %s" % (sLabels["skipped"][language], ", ".join(issues))
 
     htmlMessage += "<br>%s" % (sLabels["question"][language])
-    htmlMessage += "<br><br>%s" % (sLabels["readme"][language])
+    htmlMessage += "<br><br><div id='InfoLayer'>"
+    htmlMessage += "%s" % (sLabels["readme"][language])
     htmlMessage += "<br>%s" % (sLabels["readme"]["en" if (language=="jp") else "jp"])   
+    htmlMessage += "</div>"
     htmlMessage += htmlMessageFooter
 
     message = open(mapName+".html", "w")
