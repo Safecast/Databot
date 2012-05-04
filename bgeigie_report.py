@@ -112,7 +112,7 @@ sLabels = {
   "amax"  : {"en": "Highest altitude (m)", "jp": u"最高高度（m）"},
   "aavg"  : {"en": "Average altitude (m)", "jp": u"平均高度（m）"},
   "amin"  : {"en": "Lowest altitude (m)", "jp": u"最低高度（m）"},
-  "model"  : {"en": "Model", "jp": u"モデル名"},
+  "model"  : {"en": "Model", "jp": u"型"},
   "summary"  : {"en": "Summary table", "jp": u"要約表"},
   "error"  : {"en": "Exceptions", "jp": u"例外"},
   "skipped"  : {"en": "Lines skipped from the log", "jp": u"無効なデータ列"},
@@ -375,7 +375,7 @@ def loadLogFile(filename, enableuSv):
     if data[0] == "$BMRDD" or data[0] == "$BGRDD":
       if bgeigieModel == "":
          if data[0] == "$BMRDD": bgeigieModel = "bGeigieMini"
-         elif data[0] == "$BGRDD": bgeigieModel = "bGeigie"
+         elif data[0] == "$BGRDD": bgeigieModel = "bGeigieClassic"
       if len(data) != 15 or data[6] != "A":
          skippedLines["U"].append(lineCounter)
          continue

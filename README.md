@@ -7,7 +7,7 @@ Safecast tool to convert bGeigie logs to static pdf maps
 ## Requirements
 
 * python 2.6
-* PIL
+* PIL (with jpeg support)
 * matplotlib, basemap
 * numpy
 * reporlab
