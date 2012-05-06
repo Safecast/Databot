@@ -78,7 +78,7 @@ from reportlab.pdfbase import _fontdata_widths_zapfdingbats
 dataFolder = os.path.realpath(os.path.dirname(sys.argv[0]))+"/data"
 binSize = 0.1 # 0.1 km
 borderSize = 1.0 # x binSize
-CPMfactor = 300.0
+CPMfactor = 334.0
 maxDelayBetweenReadings = 2*60*60 # 2 hour is suspect (split)
 maxDistanceBetweenReadings = 100*binSize # 10 km is suspect
 debugMode = False
@@ -379,7 +379,7 @@ def loadLogFile(filename, enableuSv):
     if line[0] == "#": 
       if line.find("format=") != -1:
          # Grab bgeigie version
-         bgeigieVersion=line[line.find("format=")+7:].strip()
+         bgeigieVersion = " %s" % (line[line.find("format=")+7:].strip())
       continue # ignore comments
     data = line.split(",")
 
@@ -475,7 +475,7 @@ def loadLogFile(filename, enableuSv):
   
   # Get the bgeigie model
   if (bgeigieModel != ""):
-    model = "%s %s %s" % (bgeigieModel, bgeigieVersion, bgeigieSerial)
+    model = "%s%s %s" % (bgeigieModel, bgeigieVersion, bgeigieSerial)
   else:
     model = ""
 
@@ -836,7 +836,7 @@ def drawMap(mapName, data, language, showTitle):
 
     # Save png file
     print "save the map ..."
-    plt.savefig(mapName+".png", dpi = dpi, pad_inches=0, bbox_inches='tight')
+    plt.savefig(mapName+".png", dpi = dpi, bbox_inches='tight') # pad_inches=0
     Image.open(mapName+".png").save(mapName+".jpg",quality=70) # create a 70% quality jpeg
     
     # Cleanup resources
