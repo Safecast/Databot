@@ -30,7 +30,7 @@ from mpl_toolkits.basemap import Basemap as Basemap
 # mathematical libraries
 import numpy as np
 import pylab as pl
-import math
+import math, random
 
 # Math
 from math import radians,asin,sqrt,pi,cos,sin,log,exp,atan
@@ -124,12 +124,12 @@ sLabels = {
 
 # Map scale table: area size in km -> (OSM zoom level, font size, label length, dpi)
 scaleTable = { 
-   0.0 : {"zoom" : 16, "font": 7, "label": 4, "dpi": 100}, # from 0 to 3 km
-   3.0 : {"zoom" : 15, "font": 4, "label": 4, "dpi": 150}, # from 3 to 5 km
-   5.0 : {"zoom" : 15, "font": 3, "label": 3, "dpi": 200}, # from 5 to 8 km
-   8.0 : {"zoom" : 13, "font": 2, "label": 3, "dpi": 250}, # from 8 to 25 km
-   25.0 : {"zoom" : 11, "font": 2, "label": 1, "dpi": 300}, # from 25 to 100 km
-   50.0 : {"zoom" : 10, "font": 1, "label": 0, "dpi": 300}, # over 100 km
+   0.0 : {"zoom" : 16, "font": 7, "label": 4, "dpi": 100, "bin": 0.1}, # from 0 to 3 km
+   3.0 : {"zoom" : 15, "font": 4, "label": 4, "dpi": 150, "bin": 0.1}, # from 3 to 5 km
+   5.0 : {"zoom" : 15, "font": 3, "label": 3, "dpi": 200, "bin": 0.1}, # from 5 to 8 km
+   8.0 : {"zoom" : 13, "font": 2, "label": 3, "dpi": 250, "bin": 0.1}, # from 8 to 25 km
+   25.0 : {"zoom" : 11, "font": 2, "label": 1, "dpi": 300, "bin": 0.1}, # from 25 to 50 km
+   50.0 : {"zoom" : 10, "font": 1, "label": 0, "dpi": 300, "bin": 1.0}, # over 50 km
 }
 
 # -----------------------------------------------------------------------------
@@ -159,6 +159,17 @@ def trace( debug ):
        else:
          return aFunc
     return concreteDescriptor
+   
+# -----------------------------------------------------------------------------
+# Generate random name
+# ----------------------------------------------------------------------------- 
+def random_filename(chars="0123456789ABCDEF", length=16, prefix='',
+                    suffix='', verify=False, attempts=10):
+  for attempt in range(attempts):
+    filename = ''.join([random.choice(chars) for i in range(length)])
+    filename = prefix + filename + suffix
+    if not verify or not os.path.exists(filename):
+        return filename
 
 # -----------------------------------------------------------------------------
 # Compute distance between two geographic positions
@@ -343,6 +354,7 @@ def loadLogFile(filename, enableuSv):
   
   bgeigieModel = ""
   bgeigieVersion = ""
+  bgeigieSerial = ""
 
   # Load the bGeigie log file
   bg = open(filename, "r")
@@ -389,6 +401,10 @@ def loadLogFile(filename, enableuSv):
       # Ignore invalid data
       skippedLines["U"].append(lineCounter)
       continue
+      
+    # Extract serial number
+    if (bgeigieSerial == ""):
+      bgeigieSerial = "(#%s)" % s_id 
 
     # Extract date and CPM measurements
     try:
@@ -459,7 +475,7 @@ def loadLogFile(filename, enableuSv):
   
   # Get the bgeigie model
   if (bgeigieModel != ""):
-    model = "%s %s" % (bgeigieModel, bgeigieVersion)
+    model = "%s %s %s" % (bgeigieModel, bgeigieVersion, bgeigieSerial)
   else:
     model = ""
 
@@ -656,11 +672,12 @@ def loadTiles(lat_min,lon_min,lat_max,lon_max, zoom):
         spriteSheet.paste(image, (pasteX, pasteY))
         pasteY += 256
       pasteX += 256
-
-    spriteSheet.save(os.path.join(tempfile.gettempdir(),"jp_map_tiles.png"), quality=50)
+      
+    filename = random_filename(suffix=".png")
+    spriteSheet.save(os.path.join(tempfile.gettempdir(), filename), quality=50)
 
     c = projection.corners(gx0 , gy0, gx1 , gy1, zoom)
-    return c
+    return filename, c
 
 # -----------------------------------------------------------------------------
 # Draw final map (tile layer + rectangular binning 100mx100m layer)
@@ -678,7 +695,7 @@ def drawMap(mapName, data, language, showTitle):
     print "original area %.3f km x %.3f km" % (owidth, oheight)
 
     # Adjust label size and tiles zoom
-    (zoom, fontsize, labelsize, dpi) = (16, 7, 4, 100)
+    (zoom, fontsize, labelsize, dpi, binSize) = (16, 7, 4, 100, 0.1)
 
     scales = scaleTable.keys()
     scales.sort()
@@ -688,7 +705,12 @@ def drawMap(mapName, data, language, showTitle):
         continue
       else:
        print scaleTable[s]
-       (zoom, fontsize, labelsize, dpi) = (scaleTable[s]["zoom"],scaleTable[s]["font"],scaleTable[s]["label"],scaleTable[s]["dpi"])
+       (zoom, fontsize, labelsize, dpi, binSize) = (
+            scaleTable[s]["zoom"], 
+            scaleTable[s]["font"],
+            scaleTable[s]["label"],
+            scaleTable[s]["dpi"],
+            scaleTable[s]["bin"])
        break
 
     # Add 100m border around the measured area
@@ -742,9 +764,10 @@ def drawMap(mapName, data, language, showTitle):
       statTable+=[(sLabels["model"][language], ("%s" % model))]
 
     # Load tiles
-    ctilesLon, ctilesLat = loadTiles(lat_min,lon_min,lat_max,lon_max, zoom)
+    tilename, (ctilesLon, ctilesLat) = loadTiles(lat_min,lon_min,lat_max,lon_max, zoom)
 
     # Create the basemap
+    print "create the basemap ..."
     m = Basemap(projection='merc', llcrnrlon=lon_min ,llcrnrlat=lat_min, urcrnrlon=lon_max ,urcrnrlat=lat_max, resolution='i')
 
     # Compute Hayakawa-san color map
@@ -760,11 +783,12 @@ def drawMap(mapName, data, language, showTitle):
       plt.title(title, fontsize=10)
 
     # Add the OSM map
+    print "add OSM layer ..."
     tx,ty = m(ctilesLon,ctilesLat)
     xmin,xmax = min(tx),max(tx)
     ymin,ymax = min(ty),max(ty)
     tilesExtent = (xmin,xmax,ymin,ymax)
-    tiles = Image.open(os.path.join(tempfile.gettempdir(),"jp_map_tiles.png")).transpose(Image.FLIP_TOP_BOTTOM)
+    tiles = Image.open(os.path.join(tempfile.gettempdir(),tilename)).transpose(Image.FLIP_TOP_BOTTOM)
     plt.imshow(tiles, extent = tilesExtent, alpha = 0.8)
    
     # Draw Safecast data on the map
@@ -772,6 +796,7 @@ def drawMap(mapName, data, language, showTitle):
     #m.scatter(x, y, s=3, c=cpm, cmap=cmap, linewidths=0.1, alpha=1, norm=normCPM, zorder = 5)
 
     # Draw the rectangle binning
+    print "add binning layer ..."
     x_min,y_min = m(lon_min,lat_min)
     x_max,y_max = m(lon_max,lat_max)
     imdata, mask, extent, centers = rectangularBinNumpy(x_min,y_min,x_max,y_max,zip(x,y,cpm), gridsize[0], gridsize[1])
@@ -779,6 +804,7 @@ def drawMap(mapName, data, language, showTitle):
     plt.imshow(drive100m, extent = extent, interpolation = 'nearest', cmap=cmap, norm=normCPM, alpha = 0.9)
 
     # Show measurement labels
+    print "add readings label ..."
     for w in range(gridsize[0]):
       for h in range(gridsize[1]):
         tx, ty = centers[gridsize[1]-h-1][w]
@@ -806,13 +832,17 @@ def drawMap(mapName, data, language, showTitle):
     MaxSize = max(DefaultSize[0], DefaultSize[1])
     plt.gcf().set_size_inches(MaxSize, MaxSize*(height/width))
     NewSize = plt.gcf().get_size_inches()
+    print "page size %dx%d inches" % (NewSize[0], NewSize[1])
 
     # Save png file
-    plt.savefig(mapName+".png", dpi = dpi, bbox_inches='tight')
+    print "save the map ..."
+    plt.savefig(mapName+".png", dpi = dpi, pad_inches=0, bbox_inches='tight')
     Image.open(mapName+".png").save(mapName+".jpg",quality=70) # create a 70% quality jpeg
+    
+    # Cleanup resources
     plt.clf() # clear the plot (free the memory for the other threads)
     pl.close('all')
-
+    os.remove(os.path.join(tempfile.gettempdir(),tilename))
     print "Done."
 
     return [NewSize, legend, statTable, skipped]
