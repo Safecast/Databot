@@ -188,12 +188,12 @@ class Gmail():
              fp.write(part.get_payload(decode=True))
              fp.close()
 
-             if os.path.splitext(filename)[1] != ".LOG":
+             if (os.path.splitext(filename)[1]).upper() != ".LOG":
                 logPrint("Check for attached zip file ...")
                 try:
                   filezip = zipfile.ZipFile(att_path, "r")
                   for info in filezip.infolist():
-                     if os.path.splitext(info.filename)[1] == ".LOG":
+                     if (os.path.splitext(info.filename)[1]).upper() == ".LOG":
                        logname = os.path.join(self.folder, os.path.basename(info.filename))
                        logPrint(" - %s [%d bytes]" % (logname, info.file_size))
                        fp = open(logname, "wb")
