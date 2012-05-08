@@ -26,6 +26,7 @@ import matplotlib.pyplot as plt
 from matplotlib import colors
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from mpl_toolkits.basemap import Basemap as Basemap
+import matplotlib.patheffects as PathEffects
 
 # mathematical libraries
 import numpy as np
@@ -812,10 +813,8 @@ def drawMap(mapName, data, language, showTitle):
           value = "%0.3f" % (imdata[h][w])
           value = value.lstrip("0")
           if len(value)>labelsize: value = value[:labelsize]
-          if imdata[h][w] > 4.0:
-            plt.text(tx,ty,value, fontsize=fontsize, ha='center',va='center',color='w', fontweight='bold')
-          else:
-            plt.text(tx,ty,value, fontsize=fontsize, ha='center',va='center',color='k', fontweight='bold')
+          label = plt.text(tx,ty,value, fontsize=fontsize, ha='center',va='center',color='k', fontweight='bold')
+          plt.setp(label, path_effects=[PathEffects.withStroke(linewidth=1, foreground="w")])
 
     # Legend
     legend = sLabels["legend"][language]
