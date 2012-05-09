@@ -11,6 +11,7 @@
 # system modules
 import datetime, os, sys, traceback
 import ConfigParser
+import re
 
 # safecast module
 from bgeigie_report import processFiles
@@ -156,7 +157,13 @@ class Gmail():
            options.pdf = True
            options.kml = True
 
-         sender = [mail["From"]]
+         mailto = [mail["From"]]
+
+         # Check for emails in the subject
+         email_pattern = re.compile("[-a-zA-Z0-9._]+@[-a-zA-Z0-9_]+.[a-zA-Z0-9_.]+")
+         emails = re.findall(email_pattern, mail["Subject"])
+         if len(mailto):
+           mailto = emails
 
          # Mark as read
          m.uid('STORE', emailid, '+FLAGS', '(\Seen)')
@@ -210,7 +217,7 @@ class Gmail():
              else:
                 filelist.append(att_path)
 
-         result = [sender, filelist, options]
+         result = [mailto, filelist, options]
 
      logPrint("[GMAIL] Done.")
      return result
