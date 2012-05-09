@@ -157,13 +157,23 @@ class Gmail():
            options.pdf = True
            options.kml = True
 
-         mailto = [mail["From"]]
-
-         # Check for emails in the subject
+         # Default recipient is the sender
          email_pattern = re.compile("[-a-zA-Z0-9._]+@[-a-zA-Z0-9_]+.[a-zA-Z0-9_.]+")
+         mailto = re.findall(email_pattern, mail["From"])
+
+         # Check for emails in "Subject"
          emails = re.findall(email_pattern, mail["Subject"])
-         if len(mailto):
+         if len(emails):
            mailto = emails
+
+         # Check for emails in "To"
+         emails = re.findall(email_pattern, mail["To"])
+         emails = [e for e in emails if e != self.user] # except user itself
+         if len(emails):
+           mailto = emails
+
+         # Cleanup for any duplicates
+         mailto = list(set(mailto))
 
          # Mark as read
          m.uid('STORE', emailid, '+FLAGS', '(\Seen)')
@@ -272,6 +282,7 @@ if __name__ == '__main__':
     user = config.get('gmail', 'user')
     password = config.get('gmail', 'password')
     recipients = config.get('gmail', 'recipients')
+    blacklist = config.get('gmail', 'blacklist')
   else:
     logPrint("Configuration file is missing")
     sys.exit(0)
@@ -284,7 +295,14 @@ if __name__ == '__main__':
 
   if (len(result)):
     mailto, filelist, options = result
+    
+    # Remove blacklisted recipients
+    mailto = [email for email in mailto if email not in blacklist]
+    
+    # Create email body
     reports = processFiles(filelist, options)
+
+    # Send emails with attachments
     if recipients != "": 
         # default recipients
         print "Default recipients =",recipients
