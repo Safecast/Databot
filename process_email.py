@@ -156,7 +156,7 @@ class Gmail():
            options.pdf = True
            options.kml = True
 
-         sender = mail["From"]
+         sender = [mail["From"]]
 
          # Mark as read
          m.uid('STORE', emailid, '+FLAGS', '(\Seen)')
@@ -242,7 +242,7 @@ class Gmail():
             msg.attach(report)
 
          # Send the email via our own SMTP server.
-         logPrint("[GMAIL] Sending the email ...")
+         logPrint("[GMAIL] Sending the email %s ..." % recipients)
          self._sendMessage(msg)
          logPrint("[GMAIL] Done.")
 
@@ -264,6 +264,7 @@ if __name__ == '__main__':
   if "gmail" in config.sections():
     user = config.get('gmail', 'user')
     password = config.get('gmail', 'password')
+    recipients = config.get('gmail', 'recipients')
   else:
     logPrint("Configuration file is missing")
     sys.exit(0)
@@ -275,9 +276,13 @@ if __name__ == '__main__':
   result = gmail.fetch("logs")
 
   if (len(result)):
-    sender, filelist, options = result
+    mailto, filelist, options = result
     reports = processFiles(filelist, options)
-    gmail.send([sender], reports)
+    if recipients != "": 
+        # default recipients
+        print "Default recipients =",recipients
+        mailto = [m.strip() for m in recipients.split(",")]
+    gmail.send(mailto, reports)
 
   print '='*80
 
