@@ -117,7 +117,7 @@ sLabels = {
   "summary"  : {"en": "Summary table", "jp": u"要約表"},
   "error"  : {"en": "Exceptions", "jp": u"例外"},
   "skipped"  : {"en": "Lines skipped from the log", "jp": u"無効なデータ列"},
-  "legend"  : {"en": "The readings are averaged over 100m x 100m squares", "jp": u"測定値は平均100m四方"},
+  "legend"  : {"en": "The readings are averaged per %dm square", "jp": u"測定値は平均%dm四方"},
   "question" : {"en": "In case of any question or trouble, please contact <a href='mailto:data@safecast.org'>data@safecast.org</a>", "jp": u"何らかの質問あるいは問題の場合には、<a href='mailto:data@safecast.org'>data@safecast.org</a>と連絡をとってください。"},
   "readme": {"en": "In the subject line of your email, type in these tags: <b>[en]</b> for English mode, <b>[pdf]</b> for PDF report, <b>[kml]</b> for KML report, <b>[gpx]</b> for GPX report and <b>[csv]</b> for CSV report (default is <b>[jp][pdf][kml]</b>)", 
              "jp": u"メールの件名には、必要に応じて、次のタグを入力してください: 英語での返信を希望する場合は<b>[en]</b>、要約表のPDF版を希望する場合は<b>[pdf]</b>、KML版を希望する場合は<b>[kml]</b>、GPX版を希望する場合は<b>[gpx]</b>、CSV版を希望する場合は<b>[csv]</b> （既定値は、<b>[jp]</b> <b>[pdf]</b> <b>[kml]</b> となっています。）"},
@@ -125,12 +125,15 @@ sLabels = {
 
 # Map scale table: area size in km -> (OSM zoom level, font size, label length, dpi)
 scaleTable = { 
-   0.0 : {"zoom" : 16, "font": 7, "label": 4, "dpi": 100, "bin": 0.1}, # from 0 to 3 km
-   3.0 : {"zoom" : 15, "font": 3, "label": 4, "dpi": 150, "bin": 0.1}, # from 3 to 5 km
+   0.0 : {"zoom" : 16, "font": 8, "label": 4, "dpi": 100, "bin": 0.1}, # from 0 to 2 km
+   2.0 : {"zoom" : 16, "font": 7, "label": 4, "dpi": 100, "bin": 0.1}, # from 2 to 3 km
+   3.0 : {"zoom" : 15, "font": 4, "label": 4, "dpi": 150, "bin": 0.1}, # from 3 to 4 km
+   4.0 : {"zoom" : 15, "font": 3, "label": 4, "dpi": 150, "bin": 0.1}, # from 4 to 5 km
    5.0 : {"zoom" : 15, "font": 3, "label": 3, "dpi": 200, "bin": 0.1}, # from 5 to 8 km
-   8.0 : {"zoom" : 13, "font": 2, "label": 3, "dpi": 250, "bin": 0.1}, # from 8 to 25 km
-   25.0 : {"zoom" : 11, "font": 1, "label": 0, "dpi": 300, "bin": 0.1}, # from 25 to 50 km
-   50.0 : {"zoom" : 10, "font": 1, "label": 0, "dpi": 300, "bin": 1.0}, # over 50 km
+   8.0 : {"zoom" : 13, "font": 2, "label": 3, "dpi": 250, "bin": 0.1}, # from 8 to 12 km
+   12.0 : {"zoom" : 13, "font": 2, "label": 2, "dpi": 250, "bin": 0.1}, # from 12 to 25 km
+   25.0 : {"zoom" : 11, "font": 1, "label": 0, "dpi": 300, "bin": 0.1}, # from 25 to 40 km
+   40.0 : {"zoom" : 10, "font": 1, "label": 0, "dpi": 300, "bin": 1.0}, # over 40 km
 }
 
 # -----------------------------------------------------------------------------
@@ -817,7 +820,7 @@ def drawMap(mapName, data, language, showTitle):
           plt.setp(label, path_effects=[PathEffects.withStroke(linewidth=1, foreground="w")])
 
     # Legend
-    legend = sLabels["legend"][language]
+    legend = sLabels["legend"][language] % (binSize*1000)
     divider = make_axes_locatable(plt.gca())
     cax = divider.append_axes("bottom", size="5%", pad=0.05)
     cbar = plt.colorbar(cax=cax, orientation="hozrizontal", format=u"%0.3f~\nµSv/h")
