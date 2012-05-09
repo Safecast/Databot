@@ -126,10 +126,10 @@ sLabels = {
 # Map scale table: area size in km -> (OSM zoom level, font size, label length, dpi)
 scaleTable = { 
    0.0 : {"zoom" : 16, "font": 7, "label": 4, "dpi": 100, "bin": 0.1}, # from 0 to 3 km
-   3.0 : {"zoom" : 15, "font": 4, "label": 4, "dpi": 150, "bin": 0.1}, # from 3 to 5 km
+   3.0 : {"zoom" : 15, "font": 3, "label": 4, "dpi": 150, "bin": 0.1}, # from 3 to 5 km
    5.0 : {"zoom" : 15, "font": 3, "label": 3, "dpi": 200, "bin": 0.1}, # from 5 to 8 km
    8.0 : {"zoom" : 13, "font": 2, "label": 3, "dpi": 250, "bin": 0.1}, # from 8 to 25 km
-   25.0 : {"zoom" : 11, "font": 2, "label": 1, "dpi": 300, "bin": 0.1}, # from 25 to 50 km
+   25.0 : {"zoom" : 11, "font": 1, "label": 0, "dpi": 300, "bin": 0.1}, # from 25 to 50 km
    50.0 : {"zoom" : 10, "font": 1, "label": 0, "dpi": 300, "bin": 1.0}, # over 50 km
 }
 
