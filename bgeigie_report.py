@@ -15,6 +15,7 @@ from optparse import OptionParser
 import glob
 import tempfile
 import zipfile
+import codecs
 
 # for py2exe binary
 #os.environ['BASEMAPDATA'] = os.path.realpath(os.path.dirname(sys.argv[0]))+"/mpl_toolkits/basemap/data"
@@ -935,10 +936,12 @@ def generatePDFReport(mapName, language, size, legend, statisticTable):
 # -----------------------------------------------------------------------------
 @trace(debugMode)
 def generateHTMLReport(mapName, language, statisticTable, skipped):
+    # <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/> 
+    # <meta http-equiv="Content-Type" content="text/html; charset=Shift-JIS">
     htmlMessageHeader = """\
 <html>
   <head>
-    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/> 
+    <meta http-equiv="Content-Type" content="text/html; charset=Shift-JIS">
     <style type="text/css">
      h1 {
 	   font: bold 18px "Trebuchet MS", Verdana, Arial, Helvetica,
@@ -1000,8 +1003,8 @@ def generateHTMLReport(mapName, language, statisticTable, skipped):
     htmlMessage += "</div>"
     htmlMessage += htmlMessageFooter
 
-    message = open(mapName+".html", "w")
-    message.write(htmlMessage.encode("utf8"))
+    message = codecs.open(mapName+".html", "w", "shift-jis")
+    message.write(htmlMessage)
     message.close()
     return mapName+".html"
 
