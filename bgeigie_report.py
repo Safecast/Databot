@@ -138,6 +138,23 @@ scaleTable = {
 }
 
 # -----------------------------------------------------------------------------
+# Get character encoding
+# -----------------------------------------------------------------------------
+# Encoding table
+encodingTable = {
+# codec  : html charset
+ "utf-8" : "UTF-8",
+ "shift-jis" : "Shift-JIS",
+ "iso-2022-jp" : "ISO-2022-JP"
+}
+
+def getEncoding(charset):
+   if charset in encodingTable.keys():
+     return (charset, encodingTable[charset])
+   else:
+     return ("utf-8", "UTF-8")
+
+# -----------------------------------------------------------------------------
 # Log print
 # -----------------------------------------------------------------------------
 def logPrint(message):
@@ -935,13 +952,13 @@ def generatePDFReport(mapName, language, size, legend, statisticTable):
 # Generate HTML report
 # -----------------------------------------------------------------------------
 @trace(debugMode)
-def generateHTMLReport(mapName, language, statisticTable, skipped):
+def generateHTMLReport(mapName, language, statisticTable, skipped, charset):
     # <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/> 
     # <meta http-equiv="Content-Type" content="text/html; charset=Shift-JIS">
     htmlMessageHeader = """\
 <html>
   <head>
-    <meta http-equiv="Content-Type" content="text/html; charset=Shift-JIS">
+    <meta http-equiv="Content-Type" content="text/html; charset=%s">
     <style type="text/css">
      h1 {
 	   font: bold 18px "Trebuchet MS", Verdana, Arial, Helvetica,
@@ -984,7 +1001,7 @@ def generateHTMLReport(mapName, language, statisticTable, skipped):
   </body>
 </html>
 """
-    htmlMessage = htmlMessageHeader
+    htmlMessage = htmlMessageHeader % getEncoding(charset)[1]
 
     htmlMessage += "    <h1>%s</h1><table cellspacing='0'>" % sLabels["summary"][language]
     for e in statisticTable:
@@ -1003,7 +1020,7 @@ def generateHTMLReport(mapName, language, statisticTable, skipped):
     htmlMessage += "</div>"
     htmlMessage += htmlMessageFooter
 
-    message = codecs.open(mapName+".html", "w", "shift-jis")
+    message = codecs.open(mapName+".html", "w", getEncoding(charset)[0])
     message.write(htmlMessage)
     message.close()
     return mapName+".html"
@@ -1360,8 +1377,8 @@ def generateCSVreport(mapName, data):
 # -----------------------------------------------------------------------------
 @trace(debugMode)
 def processFiles(fileList, options):
-    language, pdfEnabled, kmlEnabled, gpxEnabled, csvEnabled = (
-          options.language, options.pdf, options.kml, options.gpx, options.csv)
+    language, charset, pdfEnabled, kmlEnabled, gpxEnabled, csvEnabled = (
+          options.language, options.charset, options.pdf, options.kml, options.gpx, options.csv)
 
     # Split drives if necessary
     newFiles = []
@@ -1404,7 +1421,7 @@ def processFiles(fileList, options):
         if csvEnabled:
           attachments.append(generateCSVreport(logName, data))
 
-        message = generateHTMLReport(logName, language, statisticTable, skipped)
+        message = generateHTMLReport(logName, language, statisticTable, skipped, charset)
         processStatus.append((f, sum([len(skipped[e]) for e in skipped.keys()])))
       except:
         # Generic trap if something crashed
@@ -1434,6 +1451,9 @@ if __name__ == '__main__':
     parser.add_option("-l", "--language", 
                       type=str, dest="language", default="jp",
                       help="specify the default language (default jp)")
+    parser.add_option("-e", "--encoding", 
+                      type=str, dest="charset", default="iso-2022-jp",
+                      help="specify the default character encoding (default iso-2022-jp)")
     parser.add_option("-p", "--pdf",
                       action="store_true", dest="pdf", default=False,
                       help="enable PDF report")

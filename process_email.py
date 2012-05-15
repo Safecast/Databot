@@ -115,6 +115,7 @@ class Gmail():
      result = []
      options = Options()
      options.language = "jp"
+     options.charset = "iso-2022-jp"
      options.pdf = False
      options.kml = False
      options.gpx = False
@@ -151,6 +152,12 @@ class Gmail():
          if mail["Subject"].upper().find("[CSV]") != -1:
            options.csv = True
            report += 1
+
+         if mail["Subject"].upper().find("[UTF8]") != -1:
+           options.charset = "utf8"
+
+         if mail["Subject"].upper().find("[JIS]") != -1:
+           options.charset = "shift-jis"
 
          # If no special type requested, set to default
          if not report:
