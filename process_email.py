@@ -313,7 +313,7 @@ if __name__ == '__main__':
     if recipients != "": 
         # default recipients
         print "Default recipients =",recipients
-        mailto = [m.strip() for m in recipients.split(",")]
+        mailto = mailto + [m.strip() for m in recipients.split(",")]
     gmail.send(mailto, reports)
 
   print '='*80
