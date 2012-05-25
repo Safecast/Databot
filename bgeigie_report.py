@@ -82,7 +82,7 @@ binSize = 0.1 # 0.1 km
 borderSize = 1.0 # x binSize
 CPMfactor = 334.0
 maxDelayBetweenReadings = 2*60*60 # 2 hour is suspect (split)
-maxDistanceBetweenReadings = 100*binSize # 10 km is suspect
+maxDistanceBetweenReadings = 200*binSize # 20 km is suspect
 debugMode = False
 
 # Globals
@@ -127,7 +127,7 @@ sLabels = {
 # Map scale table: area size in km -> (OSM zoom level, font size, label length, dpi)
 scaleTable = { 
    0.0 : {"zoom" : 16, "font": 8, "label": 4, "dpi": 100, "bin": 0.1}, # from 0 to 2 km
-   2.0 : {"zoom" : 16, "font": 7, "label": 4, "dpi": 100, "bin": 0.1}, # from 2 to 3 km
+   2.0 : {"zoom" : 16, "font": 6, "label": 4, "dpi": 100, "bin": 0.1}, # from 2 to 3 km
    3.0 : {"zoom" : 15, "font": 4, "label": 4, "dpi": 150, "bin": 0.1}, # from 3 to 4 km
    4.0 : {"zoom" : 15, "font": 3, "label": 4, "dpi": 150, "bin": 0.1}, # from 4 to 5 km
    5.0 : {"zoom" : 15, "font": 3, "label": 3, "dpi": 200, "bin": 0.1}, # from 5 to 8 km
