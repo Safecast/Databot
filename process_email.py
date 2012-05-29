@@ -179,6 +179,12 @@ class Gmail():
          if len(emails):
            mailto = emails
 
+         # Check for emails in "Cc"
+         emails = re.findall(email_pattern, mail["Cc"])
+         emails = [e for e in emails if e != self.user] # except user itself
+         if len(emails):
+           mailto += emails
+
          # Cleanup for any duplicates
          mailto = list(set(mailto))
 
@@ -314,6 +320,9 @@ if __name__ == '__main__':
         # default recipients
         print "Default recipients =",recipients
         mailto = mailto + [m.strip() for m in recipients.split(",")]
+        # Cleanup for any duplicates
+        mailto = list(set(mailto))
+
     gmail.send(mailto, reports)
 
   print '='*80
