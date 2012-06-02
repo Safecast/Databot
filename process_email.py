@@ -180,10 +180,11 @@ class Gmail():
            mailto = emails
 
          # Check for emails in "Cc"
-         emails = re.findall(email_pattern, mail["Cc"])
-         emails = [e for e in emails if e != self.user] # except user itself
-         if len(emails):
-           mailto += emails
+         if mail["Cc"] != None:
+           emails = re.findall(email_pattern, mail["Cc"])
+           emails = [e for e in emails if e != self.user] # except user itself
+           if len(emails):
+             mailto += emails
 
          # Cleanup for any duplicates
          mailto = list(set(mailto))
