@@ -94,7 +94,7 @@ class Gmail():
    # --------------------------------------------------------------------------
    # Fetch unseen emails attachment
    # --------------------------------------------------------------------------
-   def fetch(self, folder):
+   def fetch(self, folder, blacklist):
      self.folder = folder
 
      if not os.path.exists("%s" % (self.folder)):
@@ -170,12 +170,14 @@ class Gmail():
 
          # Check for emails in "Subject"
          emails = re.findall(email_pattern, mail["Subject"])
+         emails = [e for e in emails if e not in blacklist] # except if blacklisted
          if len(emails):
            mailto = emails
 
          # Check for emails in "To"
          emails = re.findall(email_pattern, mail["To"])
          emails = [e for e in emails if e != self.user] # except user itself
+         emails = [e for e in emails if e not in blacklist] # except if blacklisted
          if len(emails):
            mailto = emails
 
@@ -183,6 +185,7 @@ class Gmail():
          if mail["Cc"] != None:
            emails = re.findall(email_pattern, mail["Cc"])
            emails = [e for e in emails if e != self.user] # except user itself
+           emails = [e for e in emails if e not in blacklist] # except if blacklisted
            if len(emails):
              mailto += emails
 
@@ -305,14 +308,11 @@ if __name__ == '__main__':
 
   # Start processing emails
   gmail = Gmail(user, password)
-  result = gmail.fetch("logs")
+  result = gmail.fetch("logs", blacklist)
 
   if (len(result)):
     mailto, filelist, options = result
-    
-    # Remove blacklisted recipients
-    mailto = [email for email in mailto if email not in blacklist]
-    
+
     # Create email body
     reports = processFiles(filelist, options)
 
