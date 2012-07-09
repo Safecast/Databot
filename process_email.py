@@ -28,6 +28,11 @@ from email import Encoders
 import zipfile
 
 # -----------------------------------------------------------------------------
+# Definitions
+# -----------------------------------------------------------------------------
+attachment_extensions = [".LOG", ".TXT"]
+
+# -----------------------------------------------------------------------------
 # Log print
 # -----------------------------------------------------------------------------
 def logPrint(message):
@@ -120,6 +125,7 @@ class Gmail():
      options.kml = False
      options.gpx = False
      options.csv = False
+     options.world = False
      report = 0
      for emailid in items:
          logPrint("[GMAIL] Processing email id %s" % emailid)
@@ -158,6 +164,9 @@ class Gmail():
 
          if mail["Subject"].upper().find("[JIS]") != -1:
            options.charset = "shift-jis"
+
+         if mail["Subject"].upper().find("[WORLD]") != -1:
+           options.world = True
 
          # If no special type requested, set to default
          if not report:
@@ -222,12 +231,12 @@ class Gmail():
              fp.write(part.get_payload(decode=True))
              fp.close()
 
-             if (os.path.splitext(filename)[1]).upper() != ".LOG":
+             if (os.path.splitext(filename)[1]).upper() not in attachment_extensions:
                 logPrint("Check for attached zip file ...")
                 try:
                   filezip = zipfile.ZipFile(att_path, "r")
                   for info in filezip.infolist():
-                     if (os.path.splitext(info.filename)[1]).upper() == ".LOG":
+                     if (os.path.splitext(info.filename)[1]).upper() in attachment_extensions:
                        logname = os.path.join(self.folder, os.path.basename(info.filename))
                        logPrint(" - %s [%d bytes]" % (logname, info.file_size))
                        fp = open(logname, "wb")
