@@ -131,10 +131,12 @@ scaleTable = {
    3.0 : {"zoom" : 15, "font": 4, "label": 4, "dpi": 150, "bin": 0.1}, # from 3 to 4 km
    4.0 : {"zoom" : 15, "font": 3, "label": 4, "dpi": 150, "bin": 0.1}, # from 4 to 5 km
    5.0 : {"zoom" : 15, "font": 3, "label": 3, "dpi": 200, "bin": 0.1}, # from 5 to 8 km
-   8.0 : {"zoom" : 13, "font": 2, "label": 3, "dpi": 250, "bin": 0.1}, # from 8 to 12 km
+   12.0 : {"zoom" : 13, "font": 2, "label": 3, "dpi": 250, "bin": 0.1}, # from 8 to 12 km
    12.0 : {"zoom" : 13, "font": 2, "label": 2, "dpi": 250, "bin": 0.1}, # from 12 to 25 km
    25.0 : {"zoom" : 11, "font": 1, "label": 0, "dpi": 300, "bin": 0.1}, # from 25 to 40 km
    40.0 : {"zoom" : 10, "font": 1, "label": 0, "dpi": 300, "bin": 1.0}, # over 40 km
+   100.0 : {"zoom" : 8, "font": 1, "label": 0, "dpi": 300, "bin": 10.0}, # over 100 km
+   1000.0 : {"zoom" : 4, "font": 1, "label": 0, "dpi": 300, "bin": 100.0}, # over 1000 km
 }
 
 # -----------------------------------------------------------------------------
@@ -266,7 +268,7 @@ def seconds_difference(stamp1, stamp2):
 # TODO: to be merged to loadLogFile
 # -----------------------------------------------------------------------------
 @trace(debugMode)
-def splitLogFile(filename, timeSplit, distanceSplit):
+def splitLogFile(filename, timeSplit, distanceSplit, worldMode):
   # Load the bGeigie log file
   bg = open(filename, "r")
   lines = bg.readlines()
@@ -286,13 +288,14 @@ def splitLogFile(filename, timeSplit, distanceSplit):
 
   # Process the log
   for line in lines:
+    # Extract items (comma separated)
     if line[0] == "#": # ignore comments
        split.write("%s" % line)
        continue
     data = line.split(",")
 
     # Check for bGeigieMini or bGeigie
-    if data[0] == "$BMRDD" or data[0] == "$BGRDD":
+    if data[0] == "$BMRDD" or data[0] == "$BGRDD" or data[0] == "$BNRDD":
       if len(data) != 15 or data[6] != "A":
          split.write("%s" % line)
          continue
@@ -325,25 +328,27 @@ def splitLogFile(filename, timeSplit, distanceSplit):
            blastlon = 0
       dlasttime = dtime
 
-      # Convert from GPS format (DDDMM.MMMM..) to decimal degrees    
+      # Convert from GPS format (DDDMM.MMMM..) to decimal degrees
       blat = float(s_latitude)/100
       blon = float(s_longitude)/100 
       blon = ((blon-int(blon))/60)*100+int(blon)
       blat = ((blat-int(blat))/60)*100+int(blat)
-      # Outside Japan, skip the reading
-      if (blat < JP_lat_min) or (blat > JP_lat_max) or (blon < JP_lon_min) or (blon > JP_lon_max):
-          split.write("%s" % line)
-          continue
-      # Too far away, split the reading
-      if (blastlon != 0) and (blastlat != 0) and distanceSplit:
-         deltakm = distance_on_unit_sphere(blastlat, blastlon, blat, blon)
-         if deltakm > maxDistanceBetweenReadings:
-           split.close()
-           logCounter+=1
-           newFilename = "%s_%03d.LOG" % (logBaseName,logCounter)
-           newFiles.append(newFilename)
-           split = open(newFilename,"w")
-           dlasttime = 0
+
+      if not worldMode:
+        # Outside Japan, skip the reading
+        if (blat < JP_lat_min) or (blat > JP_lat_max) or (blon < JP_lon_min) or (blon > JP_lon_max):
+            split.write("%s" % line)
+            continue
+        # Too far away, split the reading
+        if (blastlon != 0) and (blastlat != 0) and distanceSplit:
+           deltakm = distance_on_unit_sphere(blastlat, blastlon, blat, blon)
+           if deltakm > maxDistanceBetweenReadings:
+             split.close()
+             logCounter+=1
+             newFilename = "%s_%03d.LOG" % (logBaseName,logCounter)
+             newFiles.append(newFilename)
+             split = open(newFilename,"w")
+             dlasttime = 0
       blastlat = blat
       blastlon = blon
 
@@ -362,7 +367,7 @@ def splitLogFile(filename, timeSplit, distanceSplit):
 # Load bGeigie raw log file
 # -----------------------------------------------------------------------------
 @trace(debugMode)
-def loadLogFile(filename, enableuSv):
+def loadLogFile(filename, enableuSv, worldMode):
   # bGeigie Log format
   # header + id + time + cpm + cp5s + totc + rnStatus + latitude + northsouthindicator + longitude + eastwestindicator + altitude + gpsStatus + dop + quality
 
@@ -397,6 +402,7 @@ def loadLogFile(filename, enableuSv):
   # O Out of Japan
   
   for line in lines:
+    # Extract items (comma separated)
     lineCounter += 1
     if line[0] == "#": 
       if line.find("format=") != -1:
@@ -406,10 +412,11 @@ def loadLogFile(filename, enableuSv):
     data = line.split(",")
 
     # Check for bGeigieMini or bGeigie
-    if data[0] == "$BMRDD" or data[0] == "$BGRDD":
+    if data[0] == "$BMRDD" or data[0] == "$BGRDD" or data[0] == "$BNRDD":
       if bgeigieModel == "":
          if data[0] == "$BMRDD": bgeigieModel = "bGeigieMini"
          elif data[0] == "$BGRDD": bgeigieModel = "bGeigieClassic"
+         elif data[0] == "$BNRDD": bgeigieModel = "bGeigieNano"
       if len(data) != 15 or data[6] != "A":
          skippedLines["U"].append(lineCounter)
          continue
@@ -447,21 +454,23 @@ def loadLogFile(filename, enableuSv):
       totalDose += float(s_cp5s)
       baltitude = float(s_altitude)   
 
-      # Convert from GPS format (DDDMM.MMMM..) to decimal degrees    
+      # Convert from GPS format (DDDMM.MMMM..) to decimal degrees
       blat = float(s_latitude)/100
       blon = float(s_longitude)/100 
       blon = ((blon-int(blon))/60)*100+int(blon)
       blat = ((blat-int(blat))/60)*100+int(blat)
+
+      if not worldMode:
       # Outside Japan, skip the reading
-      if (blat < JP_lat_min) or (blat > JP_lat_max) or (blon < JP_lon_min) or (blon > JP_lon_max):
-          skippedLines["O"].append(lineCounter)
-          continue
-      # Too far away, skip the reading
-      if (blastlon != 0) and (blastlat != 0):
-         deltakm = distance_on_unit_sphere(blastlat, blastlon, blat, blon)
-         if deltakm > maxDistanceBetweenReadings:
-            skippedLines["D"].append(lineCounter)
-            continue
+        if (blat < JP_lat_min) or (blat > JP_lat_max) or (blon < JP_lon_min) or (blon > JP_lon_max):
+           skippedLines["O"].append(lineCounter)
+           continue
+        # Too far away, skip the reading
+        if (blastlon != 0) and (blastlat != 0):
+           deltakm = distance_on_unit_sphere(blastlat, blastlon, blat, blon)
+           if deltakm > maxDistanceBetweenReadings:
+              skippedLines["D"].append(lineCounter)
+              continue
       blastlat = blat
       blastlon = blon
           
@@ -484,7 +493,7 @@ def loadLogFile(filename, enableuSv):
     # Check if altitude is valid, clip if necessary
     if (baltitude < 0):
       resultAltitude.append(0)
-    elif (baltitude > JP_alt_max):
+    elif (baltitude > JP_alt_max) and not worldMode:
       resultAltitude.append(JP_alt_max)
     else:
       resultAltitude.append(baltitude)
@@ -1377,13 +1386,13 @@ def generateCSVreport(mapName, data):
 # -----------------------------------------------------------------------------
 @trace(debugMode)
 def processFiles(fileList, options):
-    language, charset, pdfEnabled, kmlEnabled, gpxEnabled, csvEnabled = (
-          options.language, options.charset, options.pdf, options.kml, options.gpx, options.csv)
+    language, charset, pdfEnabled, kmlEnabled, gpxEnabled, csvEnabled, worldMode = (
+          options.language, options.charset, options.pdf, options.kml, options.gpx, options.csv, options.world)
 
     # Split drives if necessary
     newFiles = []
     for f in fileList:     
-      newFile = splitLogFile(f, True, False)
+      newFile = splitLogFile(f, True, False, worldMode)
       newFiles += newFile
 
     # Generate map and report
@@ -1399,7 +1408,7 @@ def processFiles(fileList, options):
       message = ""
       try:
         # Load data log
-        data = loadLogFile(f, True)
+        data = loadLogFile(f, True, worldMode)
         if not len(data[0]):
           print "No valid data available."
           continue
@@ -1466,6 +1475,9 @@ if __name__ == '__main__':
     parser.add_option("-c", "--csv",
                       action="store_true", dest="csv", default=False,
                       help="enable CSV report")
+    parser.add_option("-w", "--world",
+                      action="store_true", dest="world", default=False,
+                      help="disable Japan constrains for Japan")
 
     (options, args) = parser.parse_args()
     
