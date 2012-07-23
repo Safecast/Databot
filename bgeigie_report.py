@@ -131,7 +131,7 @@ scaleTable = {
    3.0 : {"zoom" : 15, "font": 4, "label": 4, "dpi": 150, "bin": 0.1}, # from 3 to 4 km
    4.0 : {"zoom" : 15, "font": 3, "label": 4, "dpi": 150, "bin": 0.1}, # from 4 to 5 km
    5.0 : {"zoom" : 15, "font": 3, "label": 3, "dpi": 200, "bin": 0.1}, # from 5 to 8 km
-   12.0 : {"zoom" : 13, "font": 2, "label": 3, "dpi": 250, "bin": 0.1}, # from 8 to 12 km
+   8.0 : {"zoom" : 13, "font": 2, "label": 3, "dpi": 250, "bin": 0.1}, # from 8 to 12 km
    12.0 : {"zoom" : 13, "font": 2, "label": 2, "dpi": 250, "bin": 0.1}, # from 12 to 25 km
    25.0 : {"zoom" : 11, "font": 1, "label": 0, "dpi": 300, "bin": 0.1}, # from 25 to 40 km
    40.0 : {"zoom" : 10, "font": 1, "label": 0, "dpi": 300, "bin": 1.0}, # over 40 km
@@ -262,6 +262,19 @@ def minutes_difference(stamp1, stamp2):
 def seconds_difference(stamp1, stamp2):
     delta = stamp1 - stamp2
     return 24*60*60*delta.days + delta.seconds
+    
+# -----------------------------------------------------------------------------
+# Compute checksum
+# -----------------------------------------------------------------------------
+def get_checksum(line):
+    """
+    Returns the checksum as a one byte integer value.
+    In this case the checksum is the XOR of everything after '$' and before '*'.
+    """
+    s = 0
+    for c in line[1:-3]:
+        s = s ^ ord(c)
+    return s
 
 # -----------------------------------------------------------------------------
 # Split bGeigie raw log file
@@ -410,6 +423,16 @@ def loadLogFile(filename, enableuSv, worldMode):
          bgeigieVersion = " %s" % (line[line.find("format=")+7:].strip())
       continue # ignore comments
     data = line.split(",")
+    
+    # Check the checksum value
+    try:
+      original = line.split("*")[1][:2]
+      expected = "%X" % get_checksum(line[:-2])
+      if original != expected:
+        print "WARNING: line %d wrong checksum %s, expected %s" % (lineCounter, original, expected)
+    except:
+      skippedLines["U"].append(lineCounter)
+      continue
 
     # Check for bGeigieMini or bGeigie
     if data[0] == "$BMRDD" or data[0] == "$BGRDD" or data[0] == "$BNRDD":
