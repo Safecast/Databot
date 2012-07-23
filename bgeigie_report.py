@@ -342,10 +342,12 @@ def splitLogFile(filename, timeSplit, distanceSplit, worldMode):
       dlasttime = dtime
 
       # Convert from GPS format (DDDMM.MMMM..) to decimal degrees
-      blat = float(s_latitude)/100
-      blon = float(s_longitude)/100 
+      blat = abs(float(s_latitude))/100
+      blon = abs(float(s_longitude))/100 
       blon = ((blon-int(blon))/60)*100+int(blon)
       blat = ((blat-int(blat))/60)*100+int(blat)
+      if "S" == s_northsouthindicator: blat = -blat
+      if "W" == s_eastwestindicator: blon = -blon
 
       if not worldMode:
         # Outside Japan, skip the reading
@@ -478,11 +480,13 @@ def loadLogFile(filename, enableuSv, worldMode):
       baltitude = float(s_altitude)   
 
       # Convert from GPS format (DDDMM.MMMM..) to decimal degrees
-      blat = float(s_latitude)/100
-      blon = float(s_longitude)/100 
+      blat = abs(float(s_latitude))/100
+      blon = abs(float(s_longitude))/100 
       blon = ((blon-int(blon))/60)*100+int(blon)
       blat = ((blat-int(blat))/60)*100+int(blat)
-
+      if "S" == s_northsouthindicator: blat = -blat
+      if "W" == s_eastwestindicator: blon = -blon
+      
       if not worldMode:
       # Outside Japan, skip the reading
         if (blat < JP_lat_min) or (blat > JP_lat_max) or (blon < JP_lon_min) or (blon > JP_lon_max):
