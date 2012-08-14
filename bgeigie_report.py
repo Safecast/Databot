@@ -9,7 +9,7 @@
 # ----------------------------------------------------------------
 
 # system libraries
-import os, sys, time, traceback
+import os, sys, time, traceback, operator
 from datetime import datetime, timedelta
 from optparse import OptionParser
 import glob
@@ -267,21 +267,14 @@ def seconds_difference(stamp1, stamp2):
 # Compute checksum
 # -----------------------------------------------------------------------------
 def get_checksum(line):
-    """
-    Returns the checksum as a one byte integer value.
-    In this case the checksum is the XOR of everything after '$' and before '*'.
-    """
-    s = 0
-    for c in line[1:-3]:
-        s = s ^ ord(c)
-    return s
+    return reduce(operator.xor, map(ord, line[1:]))
 
 # -----------------------------------------------------------------------------
 # Split bGeigie raw log file
 # TODO: to be merged to loadLogFile
 # -----------------------------------------------------------------------------
 @trace(debugMode)
-def splitLogFile(filename, timeSplit, distanceSplit, worldMode):
+def splitLogFile(filename, timeSplit, distanceSplit, worldMode, fixChecksum = False):
   # Load the bGeigie log file
   bg = open(filename, "r")
   lines = bg.readlines()
@@ -306,6 +299,16 @@ def splitLogFile(filename, timeSplit, distanceSplit, worldMode):
        split.write("%s" % line)
        continue
     data = line.split(",")
+
+    # Check and fix the checksum value
+    if fixChecksum:
+      try:
+        original = int(line.split("*")[1][:2],16)
+        expected = get_checksum(line.split("*")[0])
+        if original != expected:
+          line = "%s*%02X\n" % (line.split("*")[0], expected) 
+      except:
+        pass
 
     # Check for bGeigieMini or bGeigie
     if data[0] == "$BMRDD" or data[0] == "$BGRDD" or data[0] == "$BNRDD":
@@ -428,10 +431,10 @@ def loadLogFile(filename, enableuSv, worldMode):
     
     # Check the checksum value
     try:
-      original = line.split("*")[1][:2]
-      expected = "%X" % get_checksum(line[:-2])
+      original = int(line.split("*")[1][:2],16)
+      expected = get_checksum(line.split("*")[0])
       if original != expected:
-        print "WARNING: line %d wrong checksum %s, expected %s" % (lineCounter, original, expected)
+        print "WARNING: line %d wrong checksum 0x%02X, expected 0x%02X" % (lineCounter, original, expected)
     except:
       skippedLines["U"].append(lineCounter)
       continue
@@ -706,6 +709,9 @@ def loadTiles(lat_min,lon_min,lat_max,lon_max, zoom):
         X = gx % (1 << zoom)
         filename = dataFolder+"/tiles/%s/%d-%d.png" % (zoom, gx, gy)
         pngurl = "http://a.tile.openstreetmap.org/%d/%d/%d.png" % (int(zoom), int(X), int(gy))
+        #pngurl = "http://tile.stamen.com/watercolor/%d/%d/%d.png" % (int(zoom), int(X), int(gy))
+        #pngurl = "http://tile.stamen.com/toner/%d/%d/%d.png" % (int(zoom), int(X), int(gy))
+
         download(pngurl, filename)
 
         image = Image.open(filename)
