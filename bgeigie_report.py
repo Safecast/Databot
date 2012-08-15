@@ -357,16 +357,16 @@ def splitLogFile(filename, timeSplit, distanceSplit, worldMode, fixChecksum = Fa
         if (blat < JP_lat_min) or (blat > JP_lat_max) or (blon < JP_lon_min) or (blon > JP_lon_max):
             split.write("%s" % line)
             continue
-        # Too far away, split the reading
-        if (blastlon != 0) and (blastlat != 0) and distanceSplit:
-           deltakm = distance_on_unit_sphere(blastlat, blastlon, blat, blon)
-           if deltakm > maxDistanceBetweenReadings:
-             split.close()
-             logCounter+=1
-             newFilename = "%s_%03d.LOG" % (logBaseName,logCounter)
-             newFiles.append(newFilename)
-             split = open(newFilename,"w")
-             dlasttime = 0
+      # Too far away, split the reading
+      if (blastlon != 0) and (blastlat != 0) and distanceSplit:
+         deltakm = distance_on_unit_sphere(blastlat, blastlon, blat, blon)
+         if deltakm > maxDistanceBetweenReadings:
+           split.close()
+           logCounter+=1
+           newFilename = "%s_%03d.LOG" % (logBaseName,logCounter)
+           newFiles.append(newFilename)
+           split = open(newFilename,"w")
+           dlasttime = 0
       blastlat = blat
       blastlon = blon
 
@@ -489,18 +489,25 @@ def loadLogFile(filename, enableuSv, worldMode):
       blat = ((blat-int(blat))/60)*100+int(blat)
       if "S" == s_northsouthindicator: blat = -blat
       if "W" == s_eastwestindicator: blon = -blon
+
+      # Invalid, skip the reading
+      if (((blat == 0) and (blon == 0)) or
+          ((blat < -90.0) or (blat > 90.0) or (blon < -180) or (blon > 180))):
+        skippedLines["U"].append(lineCounter)
+        continue
       
       if not worldMode:
       # Outside Japan, skip the reading
         if (blat < JP_lat_min) or (blat > JP_lat_max) or (blon < JP_lon_min) or (blon > JP_lon_max):
            skippedLines["O"].append(lineCounter)
            continue
-        # Too far away, skip the reading
-        if (blastlon != 0) and (blastlat != 0):
-           deltakm = distance_on_unit_sphere(blastlat, blastlon, blat, blon)
-           if deltakm > maxDistanceBetweenReadings:
-              skippedLines["D"].append(lineCounter)
-              continue
+      # Too far away, skip the reading
+      if (blastlon != 0) and (blastlat != 0):
+        deltakm = distance_on_unit_sphere(blastlat, blastlon, blat, blon)
+        if deltakm > maxDistanceBetweenReadings:
+           skippedLines["D"].append(lineCounter)
+           continue
+
       blastlat = blat
       blastlon = blon
           
