@@ -445,7 +445,7 @@ def loadLogFile(filename, enableuSv, worldMode):
          if data[0] == "$BMRDD": bgeigieModel = "bGeigieMini"
          elif data[0] == "$BGRDD": bgeigieModel = "bGeigieClassic"
          elif data[0] == "$BNRDD": bgeigieModel = "bGeigieNano"
-      if len(data) != 15 or data[6] != "A":
+      if len(data) != 15 or data[6] != "A" or data[12] != "A":
          skippedLines["U"].append(lineCounter)
          continue
 
