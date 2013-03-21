@@ -125,7 +125,9 @@ class Gmail():
      options.kml = False
      options.gpx = False
      options.csv = False
-     options.world = False
+     options.world = True # set as default
+     options.time = True # set as default
+     options.distance = True # set as default
      report = 0
      for emailid in items:
          logPrint("[GMAIL] Processing email id %s" % emailid)

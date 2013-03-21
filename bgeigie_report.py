@@ -74,7 +74,7 @@ from reportlab.pdfbase import _fontdata_widths_timesbold
 from reportlab.pdfbase import _fontdata_widths_timesitalic
 from reportlab.pdfbase import _fontdata_widths_timesbolditalic
 from reportlab.pdfbase import _fontdata_widths_symbol
-from reportlab.pdfbase import _fontdata_widths_zapfdingbats 
+from reportlab.pdfbase import _fontdata_widths_zapfdingbats
 
 # Default parameters
 dataFolder = os.path.realpath(os.path.dirname(sys.argv[0]))+"/data"
@@ -120,12 +120,12 @@ sLabels = {
   "skipped"  : {"en": "Lines skipped from the log", "jp": u"無効なデータ列"},
   "legend"  : {"en": "The readings are averaged per %dm square", "jp": u"測定値は平均%dm四方"},
   "question" : {"en": "In case of any question or trouble, please contact <a href='mailto:data@safecast.org'>data@safecast.org</a>", "jp": u"何らかの質問あるいは問題の場合には、<a href='mailto:data@safecast.org'>data@safecast.org</a>と連絡をとってください。"},
-  "readme": {"en": "In the subject line of your email, type in these tags: <b>[en]</b> for English mode, <b>[pdf]</b> for PDF report, <b>[kml]</b> for KML report, <b>[gpx]</b> for GPX report and <b>[csv]</b> for CSV report (default is <b>[jp][pdf][kml]</b>)", 
+  "readme": {"en": "In the subject line of your email, type in these tags: <b>[en]</b> for English mode, <b>[pdf]</b> for PDF report, <b>[kml]</b> for KML report, <b>[gpx]</b> for GPX report and <b>[csv]</b> for CSV report (default is <b>[jp][pdf][kml]</b>)",
              "jp": u"メールの件名には、必要に応じて、次のタグを入力してください: 英語での返信を希望する場合は<b>[en]</b>、要約表のPDF版を希望する場合は<b>[pdf]</b>、KML版を希望する場合は<b>[kml]</b>、GPX版を希望する場合は<b>[gpx]</b>、CSV版を希望する場合は<b>[csv]</b> （既定値は、<b>[jp]</b> <b>[pdf]</b> <b>[kml]</b> となっています。）"},
 }
 
 # Map scale table: area size in km -> (OSM zoom level, font size, label length, dpi)
-scaleTable = { 
+scaleTable = {
    0.0 : {"zoom" : 16, "font": 8, "label": 4, "dpi": 100, "bin": 0.1}, # from 0 to 2 km
    2.0 : {"zoom" : 16, "font": 6, "label": 4, "dpi": 100, "bin": 0.1}, # from 2 to 3 km
    3.0 : {"zoom" : 15, "font": 4, "label": 4, "dpi": 150, "bin": 0.1}, # from 3 to 4 km
@@ -183,10 +183,10 @@ def trace( debug ):
        else:
          return aFunc
     return concreteDescriptor
-   
+
 # -----------------------------------------------------------------------------
 # Generate random name
-# ----------------------------------------------------------------------------- 
+# -----------------------------------------------------------------------------
 def random_filename(chars="0123456789ABCDEF", length=16, prefix='',
                     suffix='', verify=False, attempts=10):
   for attempt in range(attempts):
@@ -201,31 +201,31 @@ def random_filename(chars="0123456789ABCDEF", length=16, prefix='',
 # from http://www.johndcook.com/python_longitude_latitude.html
 def distance_on_unit_sphere(lat1, long1, lat2, long2):
   try:
-    # Convert latitude and longitude to 
+    # Convert latitude and longitude to
     # spherical coordinates in radians.
     degrees_to_radians = math.pi/180.0
-        
+
     # phi = 90 - latitude
     phi1 = (90.0 - lat1)*degrees_to_radians
     phi2 = (90.0 - lat2)*degrees_to_radians
-        
+
     # theta = longitude
     theta1 = long1*degrees_to_radians
     theta2 = long2*degrees_to_radians
-        
+
     # Compute spherical distance from spherical coordinates.
-        
-    # For two locations in spherical coordinates 
+
+    # For two locations in spherical coordinates
     # (1, theta, phi) and (1, theta, phi)
-    # cosine( arc length ) = 
+    # cosine( arc length ) =
     #    sin phi sin phi' cos(theta-theta') + cos phi cos phi'
     # distance = rho * arc length
-    
-    cos = (math.sin(phi1)*math.sin(phi2)*math.cos(theta1 - theta2) + 
-           math.cos(phi1)*math.cos(phi2))
+
+    cos = (math.sin(phi1) * math.sin(phi2) * math.cos(theta1 - theta2) +
+           math.cos(phi1) * math.cos(phi2))
     arc = math.acos( cos )
 
-    # Remember to multiply arc by the radius of the earth 
+    # Remember to multiply arc by the radius of the earth
     # in your favorite set of units to get length.
     return arc * 6373 # 6373 for km
   except:
@@ -262,7 +262,7 @@ def minutes_difference(stamp1, stamp2):
 def seconds_difference(stamp1, stamp2):
     delta = stamp1 - stamp2
     return 24*60*60*delta.days + delta.seconds
-    
+
 # -----------------------------------------------------------------------------
 # Compute checksum
 # -----------------------------------------------------------------------------
@@ -274,7 +274,7 @@ def get_checksum(line):
 # TODO: to be merged to loadLogFile
 # -----------------------------------------------------------------------------
 @trace(debugMode)
-def splitLogFile(filename, timeSplit, distanceSplit, worldMode, fixChecksum = False):
+def splitLogFile(filename, timeSplit, distanceSplit, worldMode, ignoreDelay, ignoreDistance, fixChecksum = False):
   # Load the bGeigie log file
   bg = open(filename, "r")
   lines = bg.readlines()
@@ -306,9 +306,12 @@ def splitLogFile(filename, timeSplit, distanceSplit, worldMode, fixChecksum = Fa
         original = int(line.split("*")[1][:2],16)
         expected = get_checksum(line.split("*")[0])
         if original != expected:
-          line = "%s*%02X\n" % (line.split("*")[0], expected) 
+          line = "%s*%02X\n" % (line.split("*")[0], expected)
       except:
         pass
+
+    # Crop any extra columns
+    data = data[:15]
 
     # Check for bGeigieMini or bGeigie
     if data[0] == "$BMRDD" or data[0] == "$BGRDD" or data[0] == "$BNRDD":
@@ -332,7 +335,7 @@ def splitLogFile(filename, timeSplit, distanceSplit, worldMode, fixChecksum = Fa
       dtime = datetime.strptime(bdate, '%Y-%m-%dT%H:%M:%SZ')
 
       # Check time difference between readings
-      if dlasttime != 0 and timeSplit:
+      if dlasttime != 0 and timeSplit and not ignoreDelay:
          delta = seconds_difference(dtime, dlasttime)
          if delta > maxDelayBetweenReadings or delta < -maxDelayBetweenReadings:
            split.close()
@@ -346,7 +349,7 @@ def splitLogFile(filename, timeSplit, distanceSplit, worldMode, fixChecksum = Fa
 
       # Convert from GPS format (DDDMM.MMMM..) to decimal degrees
       blat = abs(float(s_latitude))/100
-      blon = abs(float(s_longitude))/100 
+      blon = abs(float(s_longitude))/100
       blon = ((blon-int(blon))/60)*100+int(blon)
       blat = ((blat-int(blat))/60)*100+int(blat)
       if "S" == s_northsouthindicator: blat = -blat
@@ -358,7 +361,7 @@ def splitLogFile(filename, timeSplit, distanceSplit, worldMode, fixChecksum = Fa
             split.write("%s" % line)
             continue
       # Too far away, split the reading
-      if (blastlon != 0) and (blastlat != 0) and distanceSplit:
+      if (blastlon != 0) and (blastlat != 0) and distanceSplit and not ignoreDistance:
          deltakm = distance_on_unit_sphere(blastlat, blastlon, blat, blon)
          if deltakm > maxDistanceBetweenReadings:
            split.close()
@@ -374,7 +377,7 @@ def splitLogFile(filename, timeSplit, distanceSplit, worldMode, fixChecksum = Fa
     except:
       # Something wrong, skip the reading
       split.write("%s" % line)
-      continue 
+      continue
 
   split.close()
 
@@ -385,7 +388,7 @@ def splitLogFile(filename, timeSplit, distanceSplit, worldMode, fixChecksum = Fa
 # Load bGeigie raw log file
 # -----------------------------------------------------------------------------
 @trace(debugMode)
-def loadLogFile(filename, enableuSv, worldMode):
+def loadLogFile(filename, enableuSv, worldMode, ignoreDelay, ignoreDistance):
   # bGeigie Log format
   # header + id + time + cpm + cp5s + totc + rnStatus + latitude + northsouthindicator + longitude + eastwestindicator + altitude + gpsStatus + dop + quality
 
@@ -396,7 +399,7 @@ def loadLogFile(filename, enableuSv, worldMode):
   resultLon = []
   resultAltitude = []
   totalDose = 0
-  
+
   bgeigieModel = ""
   bgeigieVersion = ""
   bgeigieSerial = ""
@@ -412,23 +415,23 @@ def loadLogFile(filename, enableuSv, worldMode):
   blastlon = 0
   blastlat = 0
   blastalt = 0
-  
+
   skippedLines = {"U": [], "T": [], "D": [], "O": []}
   # U Unknown
   # T Time issue
   # D Distance issue
   # O Out of Japan
-  
+
   for line in lines:
     # Extract items (comma separated)
     lineCounter += 1
-    if line[0] == "#": 
+    if line[0] == "#":
       if line.find("format=") != -1:
          # Grab bgeigie version
          bgeigieVersion = " %s" % (line[line.find("format=")+7:].strip())
       continue # ignore comments
     data = line.split(",")
-    
+
     # Check the checksum value
     try:
       original = int(line.split("*")[1][:2],16)
@@ -438,6 +441,9 @@ def loadLogFile(filename, enableuSv, worldMode):
     except:
       skippedLines["U"].append(lineCounter)
       continue
+
+    # Crop any extra columns
+    data = data[:15]
 
     # Check for bGeigieMini or bGeigie
     if data[0] == "$BMRDD" or data[0] == "$BGRDD" or data[0] == "$BNRDD":
@@ -458,10 +464,10 @@ def loadLogFile(filename, enableuSv, worldMode):
       # Ignore invalid data
       skippedLines["U"].append(lineCounter)
       continue
-      
+
     # Extract serial number
     if (bgeigieSerial == ""):
-      bgeigieSerial = "(#%s)" % s_id 
+      bgeigieSerial = "(#%s)" % s_id
 
     # Extract date and CPM measurements
     try:
@@ -469,22 +475,22 @@ def loadLogFile(filename, enableuSv, worldMode):
       dtime = datetime.strptime(bdate, '%Y-%m-%dT%H:%M:%SZ')
 
       # Check time difference between readings
-      if dlasttime != 0:
+      if dlasttime != 0 and not ignoreDelay:
          delta = seconds_difference(dtime, dlasttime)
          if delta > maxDelayBetweenReadings or delta < -maxDelayBetweenReadings:
            print "WARNING: line %d unexpected delay between measures [%d]" % (lineCounter, delta)
            skippedLines["T"].append(lineCounter)
-           continue  
+           continue
       dlasttime = dtime
 
       bcpm = float(s_cpm)
       if enableuSv: bcpm /= CPMfactor
       totalDose += float(s_cp5s)
-      baltitude = float(s_altitude)   
+      baltitude = float(s_altitude)
 
       # Convert from GPS format (DDDMM.MMMM..) to decimal degrees
       blat = abs(float(s_latitude))/100
-      blon = abs(float(s_longitude))/100 
+      blon = abs(float(s_longitude))/100
       blon = ((blon-int(blon))/60)*100+int(blon)
       blat = ((blat-int(blat))/60)*100+int(blat)
       if "S" == s_northsouthindicator: blat = -blat
@@ -495,14 +501,15 @@ def loadLogFile(filename, enableuSv, worldMode):
           ((blat < -90.0) or (blat > 90.0) or (blon < -180) or (blon > 180))):
         skippedLines["U"].append(lineCounter)
         continue
-      
+
       if not worldMode:
       # Outside Japan, skip the reading
         if (blat < JP_lat_min) or (blat > JP_lat_max) or (blon < JP_lon_min) or (blon > JP_lon_max):
            skippedLines["O"].append(lineCounter)
            continue
+
       # Too far away, skip the reading
-      if (blastlon != 0) and (blastlat != 0):
+      if (blastlon != 0) and (blastlat != 0) and not ignoreDistance:
         deltakm = distance_on_unit_sphere(blastlat, blastlon, blat, blon)
         if deltakm > maxDistanceBetweenReadings:
            skippedLines["D"].append(lineCounter)
@@ -510,7 +517,7 @@ def loadLogFile(filename, enableuSv, worldMode):
 
       blastlat = blat
       blastlon = blon
-          
+
     except:
       print '-'*60
       print "Error in line %d" % lineCounter
@@ -519,7 +526,7 @@ def loadLogFile(filename, enableuSv, worldMode):
       print '-'*60
       # Something wrong, skip the reading
       skippedLines["U"].append(lineCounter)
-      continue 
+      continue
 
     # Store the results
     resultDriveId.append(s_id)
@@ -540,7 +547,7 @@ def loadLogFile(filename, enableuSv, worldMode):
   resultReading = np.array(resultReading)
   resultAltitude = np.array(resultAltitude)
   if enableuSv: totalDose /= CPMfactor
-  
+
   # Get the bgeigie model
   if (bgeigieModel != ""):
     model = "%s%s %s" % (bgeigieModel, bgeigieVersion, bgeigieSerial)
@@ -548,14 +555,14 @@ def loadLogFile(filename, enableuSv, worldMode):
     model = ""
 
   print "[LOG] Lines skipped =",skippedLines
-  
+
   return (resultDriveId, resultDate, resultLat, resultLon, resultReading, resultAltitude, totalDose, skippedLines, model)
 
 # -----------------------------------------------------------------------------
 # Compute a rectangular binning from input data (x,y,value)
 # -----------------------------------------------------------------------------
 # Based on threads
-# from http://stackoverflow.com/questions/2275924/how-to-get-data-in-a-histogram-bin  
+# from http://stackoverflow.com/questions/2275924/how-to-get-data-in-a-histogram-bin
 #      http://stackoverflow.com/questions/8805601/efficiently-create-2d-histograms-from-large-datasets
 @trace(debugMode)
 def rectangularBinNumpy(x_min,y_min,x_max,y_max, data, xbins,ybins=None):
@@ -567,13 +574,13 @@ def rectangularBinNumpy(x_min,y_min,x_max,y_max, data, xbins,ybins=None):
     ywidth = max(1, y_max-y_min)
     xSize = float(xwidth/xbins)
     ySize = float(ywidth/ybins)
-    
+
     # Bins
     binsLon = np.array([int(x_min+x*xSize) for x in range( int(xwidth/xSize)+1)])
-    dLon = np.digitize(xdata, binsLon) 
+    dLon = np.digitize(xdata, binsLon)
     binsLat = np.array([int(y_min+y*ySize) for y in range( int(ywidth/ySize)+1)])
-    dLat = np.digitize(ydata, binsLat) 
-    
+    dLat = np.digitize(ydata, binsLat)
+
     def centerbin(x,y):
       # Compute bin center position for labels
       cx = int(x*xSize+xSize/2)
@@ -585,7 +592,7 @@ def rectangularBinNumpy(x_min,y_min,x_max,y_max, data, xbins,ybins=None):
     mask = [[1 for x in xrange(xbins)] for y in xrange(ybins)]
     avg = [[0.0 for x in xrange(xbins)] for y in xrange(ybins)]
     centers = [[centerbin(x,y) for x in xrange(xbins)] for y in xrange(ybins)]
-    
+
     # Compute histogram
     for i in range(len(data)):
       x,y,c = data[i]
@@ -650,14 +657,14 @@ class GoogleProjection:
         a = max(a,b)
         a = min(a,c)
         return a
-                
+
     def fromLLtoPixel(self,ll,zoom):
          d = self.zc[zoom]
          e = round(d[0] + ll[0] * self.Bc[zoom])
          f = self.minmax(sin(DEG_TO_RAD * ll[1]),-0.9999,0.9999)
          g = round(d[1] + 0.5*log((1+f)/(1-f))*-self.Cc[zoom])
          return (e,g)
-     
+
     def fromPixelToLL(self,px,zoom):
          e = self.zc[zoom]
          f = (px[0] - e[0])/self.Bc[zoom]
@@ -743,7 +750,7 @@ def loadTiles(lat_min,lon_min,lat_max,lon_max, zoom):
         spriteSheet.paste(image, (pasteX, pasteY))
         pasteY += 256
       pasteX += 256
-      
+
     filename = random_filename(suffix=".png")
     spriteSheet.save(os.path.join(tempfile.gettempdir(), filename), quality=50)
 
@@ -777,7 +784,7 @@ def drawMap(mapName, data, language, showTitle):
       else:
        print scaleTable[s]
        (zoom, fontsize, labelsize, dpi, binSize) = (
-            scaleTable[s]["zoom"], 
+            scaleTable[s]["zoom"],
             scaleTable[s]["font"],
             scaleTable[s]["label"],
             scaleTable[s]["dpi"],
@@ -793,7 +800,7 @@ def drawMap(mapName, data, language, showTitle):
     lat_min = lat.min()-borderSize*h100m
     lat_max = lat.max()+borderSize*h100m
 
-    # Compute gridsize   
+    # Compute gridsize
     width = distance_on_unit_sphere(lat_min,lon_min,lat_min,lon_max)
     height = distance_on_unit_sphere(lat_min,lon_min,lat_max,lon_min)
     print "extended area %.3f km x %.3f km" % (width, height)
@@ -828,9 +835,9 @@ def drawMap(mapName, data, language, showTitle):
 #               ("Total dose (µSv)", ("%.3f" % dose).lstrip("0")),
                (sLabels["aavg"][language], ("%.3f" % altitude.mean()).lstrip("0")),
                (sLabels["amin"][language], ("%.3f" % altitude.min()).lstrip("0")),
-               (sLabels["amax"][language], ("%.3f" % altitude.max()).lstrip("0")),       
+               (sLabels["amax"][language], ("%.3f" % altitude.max()).lstrip("0")),
     ]
-    
+
     if model != "":
       statTable+=[(sLabels["model"][language], ("%s" % model))]
 
@@ -861,7 +868,7 @@ def drawMap(mapName, data, language, showTitle):
     tilesExtent = (xmin,xmax,ymin,ymax)
     tiles = Image.open(os.path.join(tempfile.gettempdir(),tilename)).transpose(Image.FLIP_TOP_BOTTOM)
     plt.imshow(tiles, extent = tilesExtent, alpha = 0.8)
-   
+
     # Draw Safecast data on the map
     m.scatter(x, y, s=0.1, c=cpm, cmap=cmap, linewidths=0.1, alpha=0.1, facecolors='none', norm=normCPM)
     #m.scatter(x, y, s=3, c=cpm, cmap=cmap, linewidths=0.1, alpha=1, norm=normCPM, zorder = 5)
@@ -894,7 +901,7 @@ def drawMap(mapName, data, language, showTitle):
     if showTitle:
        cbar.set_label(statistics, fontsize=8)
     for tick in cbar.ax.xaxis.get_major_ticks():
-       tick.label.set_fontsize(8) 
+       tick.label.set_fontsize(8)
 
     # Page size
     DefaultSize = plt.gcf().get_size_inches()
@@ -907,7 +914,7 @@ def drawMap(mapName, data, language, showTitle):
     print "save the map ..."
     plt.savefig(mapName+".png", dpi = dpi, bbox_inches='tight') # pad_inches=0
     Image.open(mapName+".png").save(mapName+".jpg",quality=70) # create a 70% quality jpeg
-    
+
     # Cleanup resources
     plt.clf() # clear the plot (free the memory for the other threads)
     pl.close('all')
@@ -1002,7 +1009,7 @@ def generatePDFReport(mapName, language, size, legend, statisticTable):
 # -----------------------------------------------------------------------------
 @trace(debugMode)
 def generateHTMLReport(mapName, language, statisticTable, skipped, charset):
-    # <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/> 
+    # <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
     # <meta http-equiv="Content-Type" content="text/html; charset=Shift-JIS">
     htmlMessageHeader = """\
 <html>
@@ -1013,7 +1020,7 @@ def generateHTMLReport(mapName, language, statisticTable, skipped, charset):
 	   font: bold 18px "Trebuchet MS", Verdana, Arial, Helvetica,
 	   sans-serif;
      }
-     
+
      body {
        font: 12px "Trebuchet MS", Verdana, Arial, Helvetica,
 	   sans-serif;
@@ -1034,7 +1041,7 @@ def generateHTMLReport(mapName, language, statisticTable, skipped, charset):
 	   font: bold 12px "Trebuchet MS", Verdana, Arial, Helvetica,
 	   sans-serif;
      }
-     
+
      #InfoLayer {
        background-color: #F0F0F0;
        border-radius: 5px 5px 5px 5px;
@@ -1065,7 +1072,7 @@ def generateHTMLReport(mapName, language, statisticTable, skipped, charset):
     htmlMessage += "<br>%s" % (sLabels["question"][language])
     htmlMessage += "<br><br><div id='InfoLayer'>"
     htmlMessage += "%s" % (sLabels["readme"][language])
-    htmlMessage += "<br>%s" % (sLabels["readme"]["en" if (language=="jp") else "jp"])   
+    htmlMessage += "<br>%s" % (sLabels["readme"]["en" if (language=="jp") else "jp"])
     htmlMessage += "</div>"
     htmlMessage += htmlMessageFooter
 
@@ -1085,7 +1092,7 @@ def generateKMLreport(mapName, data, useZipExtension = False):
     readings = zip(*data[:5])
 
     KMLIconColors = ["white", "midgreen", "green", "lightGreen", "yellow", "orange", "darkOrange", "red", "darkRed", "grey"]
-    KMLIconBins = [0, 35, 70, 105, 175, 280, 350, 420, 680, 1050] 
+    KMLIconBins = [0, 35, 70, 105, 175, 280, 350, 420, 680, 1050]
 
     KMLHeader = """<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document>
 <Style id="grey">
@@ -1202,7 +1209,7 @@ def generateKMLreport(mapName, data, useZipExtension = False):
 </Style>
 <Style id="green">
 	<IconStyle>
-		<scale>0.5</scale>	
+		<scale>0.5</scale>
 		<Icon>
 			<href>http://www.safecast.org/kml/green.png</href>
 		</Icon>
@@ -1251,7 +1258,7 @@ def generateKMLreport(mapName, data, useZipExtension = False):
 """
     KMLPlacemark = """<Placemark>
   <name>%.3f uSv/h</name>
-  <description>	
+  <description>
     <![CDATA[<html xmlns:fo="http://www.w3.org/1999/XSL/Format" xmlns:msxsl="urn:schemas-microsoft-com:xslt">
     <head>
     <META http-equiv="Content-Type" content="text/html">
@@ -1291,14 +1298,14 @@ def generateKMLreport(mapName, data, useZipExtension = False):
 """
     KMLFooter = """</Document></kml>"""
 
-    # Create the KML file    
+    # Create the KML file
     originalLogName = os.path.basename(mapName)+".LOG"
     kmlfile = open(mapName+".kml", "w")
     kmlfile.write(KMLHeader)
 
     for did, dt, lat, lon, usv in readings:
       cpm = int(usv*CPMfactor)
-      icolor = np.digitize(np.array([cpm]), KMLIconBins) 
+      icolor = np.digitize(np.array([cpm]), KMLIconBins)
       jpdate = datetime.strptime(dt, '%Y-%m-%dT%H:%M:%SZ') + timedelta(hours=+9) # GMT+9 from Zulu time
       kmlfile.write(KMLSimplePlaceMark % (usv, int(usv*CPMfactor), jpdate.strftime("%Y/%m/%d %H:%M:%S"), KMLIconColors[icolor[0]-1], lon, lat))
       #kmlfile.write(KMLPlacemark % (usv, originalLogName, usv, cpm, jpdate.strftime("%Y/%m/%d %H:%M:%S"), KMLIconColors[icolor[0]-1], lon, lat))
@@ -1426,13 +1433,14 @@ def generateCSVreport(mapName, data):
 # -----------------------------------------------------------------------------
 @trace(debugMode)
 def processFiles(fileList, options):
-    language, charset, pdfEnabled, kmlEnabled, gpxEnabled, csvEnabled, worldMode = (
-          options.language, options.charset, options.pdf, options.kml, options.gpx, options.csv, options.world)
+    language, charset, pdfEnabled, kmlEnabled, gpxEnabled, csvEnabled, worldMode, ignoreDelay, ignoreDistance = (
+          options.language, options.charset, options.pdf, options.kml,
+          options.gpx, options.csv, options.world, options.time, options.distance)
 
     # Split drives if necessary
     newFiles = []
-    for f in fileList:     
-      newFile = splitLogFile(f, True, False, worldMode)
+    for f in fileList:
+      newFile = splitLogFile(f, True, False, worldMode, ignoreDelay, ignoreDistance)
       newFiles += newFile
 
     # Generate map and report
@@ -1448,10 +1456,17 @@ def processFiles(fileList, options):
       message = ""
       try:
         # Load data log
-        data = loadLogFile(f, True, worldMode)
+        data = loadLogFile(f, True, worldMode, ignoreDelay, ignoreDistance)
         if not len(data[0]):
           print "No valid data available."
           continue
+
+        if kmlEnabled:
+          attachments.append(generateKMLreport(logName, data, useZipExtension = True))
+        if gpxEnabled:
+          attachments.append(generateGPXreport(logName, data, trackMode=False))
+        if csvEnabled:
+          attachments.append(generateCSVreport(logName, data))
 
         # Draw map
         mapInfo = drawMap(logName, data, language, False)
@@ -1463,12 +1478,6 @@ def processFiles(fileList, options):
         # Generate reports
         if pdfEnabled:
           attachments.append(generatePDFReport(logName, language, size, legend, statisticTable))
-        if kmlEnabled:
-          attachments.append(generateKMLreport(logName, data, useZipExtension = True))
-        if gpxEnabled:
-          attachments.append(generateGPXreport(logName, data, trackMode=False))
-        if csvEnabled:
-          attachments.append(generateCSVreport(logName, data))
 
         message = generateHTMLReport(logName, language, statisticTable, skipped, charset)
         processStatus.append((f, sum([len(skipped[e]) for e in skipped.keys()])))
@@ -1497,10 +1506,10 @@ def processFiles(fileList, options):
 # -----------------------------------------------------------------------------
 if __name__ == '__main__':
     parser = OptionParser("Usage: bgeigie [options] <log-file>")
-    parser.add_option("-l", "--language", 
+    parser.add_option("-l", "--language",
                       type=str, dest="language", default="jp",
                       help="specify the default language (default jp)")
-    parser.add_option("-e", "--encoding", 
+    parser.add_option("-e", "--encoding",
                       type=str, dest="charset", default="iso-2022-jp",
                       help="specify the default character encoding (default iso-2022-jp)")
     parser.add_option("-p", "--pdf",
@@ -1517,15 +1526,21 @@ if __name__ == '__main__':
                       help="enable CSV report")
     parser.add_option("-w", "--world",
                       action="store_true", dest="world", default=False,
-                      help="disable Japan constrains for Japan")
+                      help="disable Japan constrains")
+    parser.add_option("-t", "--time",
+                      action="store_true", dest="time", default=False,
+                      help="disable time delay constrains")
+    parser.add_option("-d", "--distance",
+                      action="store_true", dest="distance", default=False,
+                      help="disable distance constrains")
 
     (options, args) = parser.parse_args()
-    
+
     if len(args) != 1:
         parser.error("Wrong number of arguments")
 
     files = glob.glob(args[0])
     processFiles(files, options)
-     
+
 
 
