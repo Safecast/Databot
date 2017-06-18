@@ -10,6 +10,7 @@
 
 # system libraries
 import os, sys, time, traceback, operator
+from time import gmtime, strftime
 from datetime import datetime, timedelta
 from optparse import OptionParser
 import glob
@@ -40,8 +41,20 @@ DEG_TO_RAD = pi/180
 RAD_TO_DEG = 180/pi
 
 # Tiles support
-from PIL import Image, ImageDraw
+try:
+  from PIL import Image, ImageDraw, ImageChops
+except:
+  import Image, ImageDraw, ImageChops
 import urllib
+
+# Mongodb
+global dbSupport
+try:
+  import pymongo
+  from collections import OrderedDict
+  dbSupport = True
+except:
+  dbSupport = False
 
 # Reportlab
 import time
@@ -84,6 +97,10 @@ CPMfactor = 334.0
 maxDelayBetweenReadings = 2*60*60 # 2 hour is suspect (split)
 maxDistanceBetweenReadings = 200*binSize # 20 km is suspect
 debugMode = False
+maxDataColumns = 15 # only process the 15 first columns from CSV
+
+gridSizeCropW = -15
+gridSizeCropH = -15
 
 # Globals
 global logfile
@@ -120,7 +137,7 @@ sLabels = {
   "skipped"  : {"en": "Lines skipped from the log", "jp": u"無効なデータ列"},
   "legend"  : {"en": "The readings are averaged per %dm square", "jp": u"測定値は平均%dm四方"},
   "question" : {"en": "In case of any question or trouble, please contact <a href='mailto:data@safecast.org'>data@safecast.org</a>", "jp": u"何らかの質問あるいは問題の場合には、<a href='mailto:data@safecast.org'>data@safecast.org</a>と連絡をとってください。"},
-  "readme": {"en": "In the subject line of your email, type in these tags: <b>[en]</b> for English mode, <b>[pdf]</b> for PDF report, <b>[kml]</b> for KML report, <b>[gpx]</b> for GPX report and <b>[csv]</b> for CSV report (default is <b>[jp][pdf][kml]</b>)",
+  "readme": {"en": "In the subject line of your email, type in these tags: <b>[en]</b> for English mode, <b>[pdf]</b> for PDF report, <b>[kml]</b> for KML report, <b>[gpx]</b> for GPX report, <b>[csv]</b> for CSV report, <b>[summary]</b> for a summary report of all logs, <b>[split]</b> for splitting report by 5km x 5km subreports, <b>[peak60]</b> for rendering peak from 1 minute CPM data and <b>[peak5]</b> for rendering peak from 5 seconds CPM data (default is <b>[jp][pdf][kml]</b>)",
              "jp": u"メールの件名には、必要に応じて、次のタグを入力してください: 英語での返信を希望する場合は<b>[en]</b>、要約表のPDF版を希望する場合は<b>[pdf]</b>、KML版を希望する場合は<b>[kml]</b>、GPX版を希望する場合は<b>[gpx]</b>、CSV版を希望する場合は<b>[csv]</b> （既定値は、<b>[jp]</b> <b>[pdf]</b> <b>[kml]</b> となっています。）"},
 }
 
@@ -183,6 +200,18 @@ def trace( debug ):
        else:
          return aFunc
     return concreteDescriptor
+
+# -----------------------------------------------------------------------------
+# Trim picture with border color like (255,255,255,255)
+# -----------------------------------------------------------------------------
+def trim(im, border):
+    bg = Image.new(im.mode, im.size, border)
+    diff = ImageChops.difference(im, bg)
+    bbox = diff.getbbox()
+    if bbox:
+        return im.crop(bbox)
+    else:
+        return im
 
 # -----------------------------------------------------------------------------
 # Generate random name
@@ -311,11 +340,11 @@ def splitLogFile(filename, timeSplit, distanceSplit, worldMode, ignoreDelay, ign
         pass
 
     # Crop any extra columns
-    data = data[:15]
+    data = data[:maxDataColumns]
 
     # Check for bGeigieMini or bGeigie
     if data[0] == "$BMRDD" or data[0] == "$BGRDD" or data[0] == "$BNRDD":
-      if len(data) != 15 or data[6] != "A":
+      if len(data) != maxDataColumns or data[6] != "A":
          split.write("%s" % line)
          continue
 
@@ -388,9 +417,10 @@ def splitLogFile(filename, timeSplit, distanceSplit, worldMode, ignoreDelay, ign
 # Load bGeigie raw log file
 # -----------------------------------------------------------------------------
 @trace(debugMode)
-def loadLogFile(filename, enableuSv, worldMode, ignoreDelay, ignoreDistance):
+def loadLogFile(filename, enableuSv, worldMode, ignoreDelay, ignoreDistance, tag, instantCPM):
   # bGeigie Log format
   # header + id + time + cpm + cp5s + totc + rnStatus + latitude + northsouthindicator + longitude + eastwestindicator + altitude + gpsStatus + dop + quality
+  global dbSupport
 
   resultDriveId = []
   resultDate = []
@@ -416,11 +446,21 @@ def loadLogFile(filename, enableuSv, worldMode, ignoreDelay, ignoreDistance):
   blastlat = 0
   blastalt = 0
 
-  skippedLines = {"U": [], "T": [], "D": [], "O": []}
+  skippedLines = {"U": [], "H": [], "T": [], "D": [], "O": []}
   # U Unknown
+  # H Header issue
   # T Time issue
   # D Distance issue
   # O Out of Japan
+
+  # Connect to database
+  if dbSupport:
+    try:
+      connection = pymongo.Connection()
+      db = connection.databot
+      locations = db.locations
+    except:
+      dbSupport = False
 
   for line in lines:
     # Extract items (comma separated)
@@ -439,11 +479,11 @@ def loadLogFile(filename, enableuSv, worldMode, ignoreDelay, ignoreDistance):
       if original != expected:
         print "WARNING: line %d wrong checksum 0x%02X, expected 0x%02X" % (lineCounter, original, expected)
     except:
-      skippedLines["U"].append(lineCounter)
+      skippedLines["H"].append(lineCounter)
       continue
 
     # Crop any extra columns
-    data = data[:15]
+    data = data[:maxDataColumns]
 
     # Check for bGeigieMini or bGeigie
     if data[0] == "$BMRDD" or data[0] == "$BGRDD" or data[0] == "$BNRDD":
@@ -451,8 +491,8 @@ def loadLogFile(filename, enableuSv, worldMode, ignoreDelay, ignoreDistance):
          if data[0] == "$BMRDD": bgeigieModel = "bGeigieMini"
          elif data[0] == "$BGRDD": bgeigieModel = "bGeigieClassic"
          elif data[0] == "$BNRDD": bgeigieModel = "bGeigieNano"
-      if len(data) != 15 or data[6] != "A" or data[12] != "A":
-         skippedLines["U"].append(lineCounter)
+      if len(data) != maxDataColumns or data[6] != "A" or data[12] != "A":
+         skippedLines["H"].append(lineCounter)
          continue
 
       # Unpack the data
@@ -462,7 +502,7 @@ def loadLogFile(filename, enableuSv, worldMode, ignoreDelay, ignoreDistance):
        s_altitude,s_gpsStatus,s_dop,s_quality) = data
     else:
       # Ignore invalid data
-      skippedLines["U"].append(lineCounter)
+      skippedLines["H"].append(lineCounter)
       continue
 
     # Extract serial number
@@ -483,7 +523,10 @@ def loadLogFile(filename, enableuSv, worldMode, ignoreDelay, ignoreDistance):
            continue
       dlasttime = dtime
 
-      bcpm = float(s_cpm)
+      if instantCPM:
+        bcpm = float(s_cp5s)*12
+      else:
+        bcpm = float(s_cpm)
       if enableuSv: bcpm /= CPMfactor
       totalDose += float(s_cp5s)
       baltitude = float(s_altitude)
@@ -528,19 +571,30 @@ def loadLogFile(filename, enableuSv, worldMode, ignoreDelay, ignoreDistance):
       skippedLines["U"].append(lineCounter)
       continue
 
+    # Check if altitude is valid, clip if necessary
+    if (baltitude < 0):
+      baltitude = 0
+    elif (baltitude > JP_alt_max) and not worldMode:
+      baltitude = JP_alt_max
+
+    # Insert result to database
+    if dbSupport:
+      locations.insert(
+        {'loc': [blat, blon],
+        'altitude': baltitude,
+        'tag': tag,
+        'log': os.path.basename(filename),
+        'drive' : s_id,
+        'date' : bdate,
+        'cpm': bcpm})
+
     # Store the results
     resultDriveId.append(s_id)
     resultDate.append(bdate)
     resultReading.append(bcpm)
     resultLat.append(blat)
     resultLon.append(blon)
-    # Check if altitude is valid, clip if necessary
-    if (baltitude < 0):
-      resultAltitude.append(0)
-    elif (baltitude > JP_alt_max) and not worldMode:
-      resultAltitude.append(JP_alt_max)
-    else:
-      resultAltitude.append(baltitude)
+    resultAltitude.append(baltitude)
 
   resultLat = np.array(resultLat)
   resultLon = np.array(resultLon)
@@ -556,6 +610,54 @@ def loadLogFile(filename, enableuSv, worldMode, ignoreDelay, ignoreDistance):
 
   print "[LOG] Lines skipped =",skippedLines
 
+  # Close database connection
+  if dbSupport:
+    locations.create_index([('loc', pymongo.GEO2D)])
+    locations.create_index([('loc', pymongo.GEOHAYSTACK), ("type", pymongo.ASCENDING)], bucket_size=1)
+    connection.disconnect()
+
+  return (resultDriveId, resultDate, resultLat, resultLon, resultReading, resultAltitude, totalDose, skippedLines, model)
+
+# -----------------------------------------------------------------------------
+# Load bGeigie database data
+# -----------------------------------------------------------------------------
+@trace(debugMode)
+def loadDbData(model, enableuSv, logs):
+  # bGeigie Log format
+  # header + id + time + cpm + cp5s + totc + rnStatus + latitude + northsouthindicator + longitude + eastwestindicator + altitude + gpsStatus + dop + quality
+
+  print "Generating summary report from", logs
+
+  resultDriveId = []
+  resultDate = []
+  resultReading = []
+  resultLat = []
+  resultLon = []
+  resultAltitude = []
+  totalDose = 0
+  skippedLines = {"U": [], "H": [], "T": [], "D": [], "O": []}
+
+  # db connection
+  connection = pymongo.Connection()
+  db = connection.databot
+  locations = db.locations
+  cursors = locations.find({'$or' : logs})
+
+  for data in cursors:
+    # Store the results
+    resultDriveId.append(data['drive'])
+    resultDate.append(data['date'])
+    resultReading.append(data['cpm'])
+    resultLat.append(data['loc'][0])
+    resultLon.append(data['loc'][1])
+    resultAltitude.append(data['altitude'])
+
+  resultLat = np.array(resultLat)
+  resultLon = np.array(resultLon)
+  resultReading = np.array(resultReading)
+  resultAltitude = np.array(resultAltitude)
+  if enableuSv: totalDose /= CPMfactor
+
   return (resultDriveId, resultDate, resultLat, resultLon, resultReading, resultAltitude, totalDose, skippedLines, model)
 
 # -----------------------------------------------------------------------------
@@ -565,7 +667,7 @@ def loadLogFile(filename, enableuSv, worldMode, ignoreDelay, ignoreDistance):
 # from http://stackoverflow.com/questions/2275924/how-to-get-data-in-a-histogram-bin
 #      http://stackoverflow.com/questions/8805601/efficiently-create-2d-histograms-from-large-datasets
 @trace(debugMode)
-def rectangularBinNumpy(x_min,y_min,x_max,y_max, data, xbins,ybins=None):
+def rectangularBinNumpy(x_min,y_min,x_max,y_max, data, xbins,ybins=None,peak=False):
     if (ybins == None): ybins = xbins
     xdata, ydata, cpm = zip(*data)
 
@@ -598,12 +700,77 @@ def rectangularBinNumpy(x_min,y_min,x_max,y_max, data, xbins,ybins=None):
       x,y,c = data[i]
       xb = dLon[i] - 1
       yb = ybins - dLat[i]
-      hist[yb][xb] += 1 # count per rectangles
-      avg[yb][xb] += c  # total value per rectangles
+      if peak:
+        if c > avg[yb][xb]:
+          hist[yb][xb] = 1 # count per rectangles
+          avg[yb][xb] = c  # total value per rectangles
+      else:
+        hist[yb][xb] += 1 # count per rectangles
+        avg[yb][xb] += c  # total value per rectangles
 
     # Compute average and mask
     for xb in range(xbins):
       for yb in range(ybins):
+        if hist[yb][xb] > 0.0:
+          mask[yb][xb] = 0 # mask out
+          if peak:
+            hist[yb][xb] = float(avg[yb][xb])
+          else:
+            hist[yb][xb] = (float(avg[yb][xb])/float(hist[yb][xb])) # average
+
+    extent = (x_min,x_max,y_min,y_max)
+    return hist, mask, extent, centers
+
+def rectangularBinFloat(x_min,y_min,x_max,y_max, data, xbins,ybins=None):
+    if (ybins == None): ybins = xbins
+    xdata, ydata, cpm = zip(*data)
+
+    print "x and y bins =", xbins,ybins
+
+    # Get min, max and width of dataset
+    xwidth = max(0.01, x_max-x_min)
+    ywidth = max(0.01, y_max-y_min)
+    xSize = float(xwidth/xbins)
+    ySize = float(ywidth/ybins)
+
+    # Bins
+    binsLon = np.array([float(x_min+x*xSize) for x in range( int(xwidth/xSize)+1)])
+    dLon = np.digitize(xdata, binsLon)
+    binsLat = np.array([float(y_min+y*ySize) for y in range( int(ywidth/ySize)+1)])
+    dLat = np.digitize(ydata, binsLat)
+
+    print binsLon, len(binsLon)
+    print binsLat, len(binsLat)
+
+    def centerbin(x,y):
+      # Compute bin center position for labels
+      cx = x_min+float(x*xSize+xSize/2)
+      cy = y_min+float(y*ySize+ySize/2)
+      return (cx,cy)
+
+    # Initialize dictionaries
+    hist = [[0.0 for x in xrange(xbins)] for y in xrange(ybins)]
+    mask = [[1 for x in xrange(xbins)] for y in xrange(ybins)]
+    avg = [[0.0 for x in xrange(xbins)] for y in xrange(ybins)]
+    centers = [[centerbin(x,y) for x in xrange(xbins)] for y in xrange(ybins)]
+
+    print "binning =",xbins, ybins
+
+    # Compute histogram
+    for i in range(len(data)):
+      x,y,c = data[i]
+      xb = dLon[i] - 1
+      yb = ybins - dLat[i]
+
+      if xb>=xbins: xb = xbins-1
+      if yb>=ybins: yb = ybins-1
+
+      hist[yb][xb] += 1 # count per rectangles
+      avg[yb][xb] += c  # total value per rectangles
+
+    # Compute average and mask
+    for xb in xrange(xbins):
+      for yb in xrange(ybins):
         if hist[yb][xb] > 0.0:
           mask[yb][xb] = 0 # mask out
           hist[yb][xb] = (float(avg[yb][xb])/float(hist[yb][xb])) # average
@@ -757,11 +924,94 @@ def loadTiles(lat_min,lon_min,lat_max,lon_max, zoom):
     c = projection.corners(gx0 , gy0, gx1 , gy1, zoom)
     return filename, c
 
+def splitMapData(data, areaSize):
+  # Extract data log
+  did, dt, lat, lon, cpm, altitude, dose, skipped, model = data
+
+  # Original dataset size
+  owidth = distance_on_unit_sphere(lat.min(),lon.min(),lat.min(),lon.max())
+  oheight = distance_on_unit_sphere(lat.min(),lon.min(),lat.max(),lon.min())
+
+  splitMapDataResult = []
+
+  if ((owidth > areaSize) or (oheight > areaSize)):
+    nbpagewidth = int(owidth/areaSize)
+    nbpageheight = int(oheight/areaSize)
+    
+    latRange = (lat.max()-lat.min())/nbpageheight
+    lonRange = (lon.max()-lon.min())/nbpagewidth
+
+    lonArray = [lon.min()+i*lonRange for i in range(nbpagewidth)]
+    latArray = [lat.min()+i*latRange for i in range(nbpageheight)]
+
+    # print nbpagewidth, lonRange, lonArray
+    # print nbpageheight, latRange, latArray
+
+    tosplit = zip(did, dt, lat, lon, cpm, altitude)
+    skipped = {"U": [], "H": [], "T": [], "D": [], "O": []}
+     
+    for latStart in latArray:
+      for lonStart in lonArray:
+        # print latStart, lonStart, latStart+latRange, lonStart+lonRange
+
+        resultDriveId = []
+        resultDate = []
+        resultReading = []
+        resultLat = []
+        resultLon = []
+        resultAltitude = []
+
+        firstPass = True # To add corners
+
+        for (did, dt, lat, lon, cpm, altitude) in tosplit:
+          if (lat >= latStart) and (lat <= latStart+latRange) and (lon >= lonStart) and (lon <= lonStart+lonRange):
+            if firstPass:
+              # add dummy corners
+              resultDriveId.append(did)
+              resultDate.append(dt)
+              resultReading.append(0)
+              resultLat.append(latStart)
+              resultLon.append(lonStart)
+              resultAltitude.append(0)
+
+              resultDriveId.append(did)
+              resultDate.append(dt)
+              resultReading.append(0)
+              resultLat.append(latStart+latRange)
+              resultLon.append(lonStart+lonRange)
+              resultAltitude.append(0)
+
+              firstPass = False
+
+            # Store the results
+            resultDriveId.append(did)
+            resultDate.append(dt)
+            resultReading.append(cpm)
+            resultLat.append(lat)
+            resultLon.append(lon)
+            resultAltitude.append(altitude)
+
+        resultLat = np.array(resultLat)
+        resultLon = np.array(resultLon)
+        resultReading = np.array(resultReading)
+        resultAltitude = np.array(resultAltitude)
+
+        print "Area", latStart, lonStart, len(resultLat)
+        if len(resultLat)>0:
+          splitMapDataResult.append((resultDriveId, resultDate, resultLat, resultLon, resultReading, resultAltitude, dose, skipped, model))
+
+  if (len(splitMapDataResult) == 1):
+    # Once chunck can be ignored
+    splitMapDataResult = []
+
+  print "Number of area chunks =", len(splitMapDataResult)
+  return splitMapDataResult
+
 # -----------------------------------------------------------------------------
 # Draw final map (tile layer + rectangular binning 100mx100m layer)
 # -----------------------------------------------------------------------------
 @trace(debugMode)
-def drawMap(mapName, data, language, showTitle):
+def drawMap(mapName, data, language, showTitle, peak=False):
     print "Generating %s.png ..." % mapName
 
     # Extract data log
@@ -806,6 +1056,11 @@ def drawMap(mapName, data, language, showTitle):
     print "extended area %.3f km x %.3f km" % (width, height)
     #gridsize = (max(1,int(math.ceil(width/binSize)-borderSize*2)), max(1, int(math.ceil(height/binSize)-borderSize*2))) # 100m x 100m
     gridsize = (max(1,int(math.ceil(width/binSize))), max(1, int(math.ceil(height/binSize)))) # 100m x 100m
+
+    # Crop border for large area and small binSize 100m
+    if ((width >= 15) or (height >= 15)) and binSize == 0.1:
+      print "crop borders"
+      gridsize = (gridsize[0]+gridSizeCropW, gridsize[1]+gridSizeCropH) # 100m x 100m
 
     pngUrl = "http://parent.tile.openstreetmap.org/cgi-bin/export?bbox=%.6f,%.6f,%.6f,%.6f&scale=%d&format=png" % (lon_min, lat_min, lon_max, lat_max, max(width, height)*3000)
     svgUrl = "http://parent.tile.openstreetmap.org/cgi-bin/export?bbox=%.6f,%.6f,%.6f,%.6f&scale=%d&format=svg" % (lon_min, lat_min, lon_max, lat_max, max(width, height)*6000)
@@ -866,7 +1121,7 @@ def drawMap(mapName, data, language, showTitle):
     xmin,xmax = min(tx),max(tx)
     ymin,ymax = min(ty),max(ty)
     tilesExtent = (xmin,xmax,ymin,ymax)
-    tiles = Image.open(os.path.join(tempfile.gettempdir(),tilename)).transpose(Image.FLIP_TOP_BOTTOM)
+    tiles = Image.open(os.path.join(tempfile.gettempdir(),tilename)) #.transpose(Image.FLIP_TOP_BOTTOM)
     plt.imshow(tiles, extent = tilesExtent, alpha = 0.8)
 
     # Draw Safecast data on the map
@@ -877,7 +1132,7 @@ def drawMap(mapName, data, language, showTitle):
     print "add binning layer ..."
     x_min,y_min = m(lon_min,lat_min)
     x_max,y_max = m(lon_max,lat_max)
-    imdata, mask, extent, centers = rectangularBinNumpy(x_min,y_min,x_max,y_max,zip(x,y,cpm), gridsize[0], gridsize[1])
+    imdata, mask, extent, centers = rectangularBinNumpy(x_min,y_min,x_max,y_max,zip(x,y,cpm), gridsize[0], gridsize[1], peak = peak)
     drive100m = np.ma.array(imdata, mask=mask)
     plt.imshow(drive100m, extent = extent, interpolation = 'nearest', cmap=cmap, norm=normCPM, alpha = 0.9)
 
@@ -896,8 +1151,8 @@ def drawMap(mapName, data, language, showTitle):
     # Legend
     legend = sLabels["legend"][language] % (binSize*1000)
     divider = make_axes_locatable(plt.gca())
-    cax = divider.append_axes("bottom", size="5%", pad=0.05)
-    cbar = plt.colorbar(cax=cax, orientation="hozrizontal", format=u"%0.3f~\nµSv/h")
+    cax = divider.append_axes("bottom", .2, pad=0.05)
+    cbar = plt.colorbar(cax=cax, orientation="horizontal", format=u"%0.3f~\nµSv/h")
     if showTitle:
        cbar.set_label(statistics, fontsize=8)
     for tick in cbar.ax.xaxis.get_major_ticks():
@@ -912,7 +1167,12 @@ def drawMap(mapName, data, language, showTitle):
 
     # Save png file
     print "save the map ..."
-    plt.savefig(mapName+".png", dpi = dpi, bbox_inches='tight') # pad_inches=0
+    try:
+       plt.savefig(mapName+".png", dpi = dpi, bbox_inches='tight') # pad_inches=0
+    except:
+       print "- keep margins !!!"
+       plt.savefig(mapName+".png", dpi = dpi)
+    trim(Image.open(mapName+".png"), (255,255,255,255)).save(mapName+".png")
     Image.open(mapName+".png").save(mapName+".jpg",quality=70) # create a 70% quality jpeg
 
     # Cleanup resources
@@ -1059,10 +1319,11 @@ def generateHTMLReport(mapName, language, statisticTable, skipped, charset):
 """
     htmlMessage = htmlMessageHeader % getEncoding(charset)[1]
 
-    htmlMessage += "    <h1>%s</h1><table cellspacing='0'>" % sLabels["summary"][language]
-    for e in statisticTable:
-       htmlMessage += "<tr><th align='left'>%s</th><td>%s</td></tr>" % (e[0], e[1])
-    htmlMessage += "</table>"
+    if len(statisticTable) > 0:
+      htmlMessage += "    <h1>%s</h1><table cellspacing='0'>" % sLabels["summary"][language]
+      for e in statisticTable:
+         htmlMessage += "<tr><th align='left'>%s</th><td>%s</td></tr>" % (e[0], e[1])
+      htmlMessage += "</table>"
 
     issues = sum([[str(x)+y for x in skipped[y]] for y in skipped.keys()], [])
     if len(issues):
@@ -1433,9 +1694,23 @@ def generateCSVreport(mapName, data):
 # -----------------------------------------------------------------------------
 @trace(debugMode)
 def processFiles(fileList, options):
-    language, charset, pdfEnabled, kmlEnabled, gpxEnabled, csvEnabled, worldMode, ignoreDelay, ignoreDistance = (
-          options.language, options.charset, options.pdf, options.kml,
-          options.gpx, options.csv, options.world, options.time, options.distance)
+    language, charset, pdfEnabled, kmlEnabled, instantCPMEnabled, gpxEnabled, csvEnabled, worldMode, ignoreDelay, ignoreDistance, summary, splitArea, peak = (
+          options.language, options.charset, options.pdf, options.kml, options.instant,
+          options.gpx, options.csv, options.world, options.time, options.distance, options.summary, options.area, options.peak)
+
+    global dbSupport
+
+    tag = str(strftime("%Y-%m-%dT%H:%M:%SZ", gmtime()))
+    logs = []
+
+    # Clean database
+    if dbSupport:
+      try:
+        connection = pymongo.Connection()
+        connection.drop_database("databot")
+        connection.disconnect()
+      except:
+        dbSupport = False
 
     # Split drives if necessary
     newFiles = []
@@ -1452,24 +1727,42 @@ def processFiles(fileList, options):
       logfile = os.path.basename(f)
       logName = os.path.splitext(f)[0]
 
+      logs.append({'log': logfile})
+
+      if peak:
+        if instantCPMEnabled:
+          logName+="_peak5"
+        else:
+          logName+="_peak60"
+
       attachments = []
       message = ""
       try:
         # Load data log
-        data = loadLogFile(f, True, worldMode, ignoreDelay, ignoreDistance)
+        data = loadLogFile(f, True, worldMode, ignoreDelay, ignoreDistance, tag, instantCPMEnabled)
         if not len(data[0]):
           print "No valid data available."
+
+          # Generate email report without attachments
+          skipped = data[7]
+          message = generateHTMLReport(logName, language, [], skipped, charset)
+          reports[f] = {"message": message, "attachments": []}
+          processStatus.append((logfile, sum([len(skipped[e]) for e in skipped.keys()])))
+          continue
+
+        if summary:
+          # In summrary mode, don't generate separate reports
           continue
 
         if kmlEnabled:
-          attachments.append(generateKMLreport(logName, data, useZipExtension = True))
+          attachments.append(generateKMLreport(logName, data, useZipExtension = False))
         if gpxEnabled:
-          attachments.append(generateGPXreport(logName, data, trackMode=False))
+          attachments.append(generateGPXreport(logName, data, trackMode = False))
         if csvEnabled:
           attachments.append(generateCSVreport(logName, data))
 
         # Draw map
-        mapInfo = drawMap(logName, data, language, False)
+        mapInfo = drawMap(logName, data, language, False, peak = peak)
         if len(mapInfo) == 0:
            # Wrong file, skip it
            continue
@@ -1478,6 +1771,25 @@ def processFiles(fileList, options):
         # Generate reports
         if pdfEnabled:
           attachments.append(generatePDFReport(logName, language, size, legend, statisticTable))
+
+        # Generate extra 5km x 5km pages to report
+        if splitArea:
+          chunks = splitMapData(data, 5.0)
+          chunkCounter = 1
+
+          for c in chunks:
+            chunkName = logName+"_p%02d" % chunkCounter
+            chunkCounter+=1
+            print "Processing %s" % chunkName
+            mapInfo = drawMap(chunkName, c, language, False, peak = peak)
+            if len(mapInfo) == 0:
+               # Wrong file, skip it
+               continue
+            size, legend, statisticTable, skipped = mapInfo
+
+            # Generate reports
+            if pdfEnabled:
+              attachments.append(generatePDFReport(chunkName, language, size, legend, statisticTable))
 
         message = generateHTMLReport(logName, language, statisticTable, skipped, charset)
         processStatus.append((f, sum([len(skipped[e]) for e in skipped.keys()])))
@@ -1492,6 +1804,71 @@ def processFiles(fileList, options):
       # Prepare attachment list
       if message != "":
          reports[f] = {"message": message, "attachments": attachments}
+
+    # Summary report
+    if dbSupport and summary:
+      logfile = "SUMMARY.LOG"
+      logName = os.path.splitext(logfile)[0]
+
+      if peak:
+        if instantCPMEnabled:
+          logName+="_peak5"
+        else:
+          logName+="_peak60"
+
+      attachments = []
+      message = ""
+      while True:
+        # Load data log
+        data = loadDbData("", True, logs)
+        if not len(data[0]):
+          print "No valid data available."
+          break
+
+        if kmlEnabled:
+          attachments.append(generateKMLreport(logName, data, useZipExtension = False))
+        if gpxEnabled:
+          attachments.append(generateGPXreport(logName, data, trackMode = False))
+        if csvEnabled:
+          attachments.append(generateCSVreport(logName, data))
+
+        # Draw map
+        mapInfo = drawMap(logName, data, language, False, peak = peak)
+        if len(mapInfo) == 0:
+           # Wrong file, skip it
+           break
+        size, legend, statisticTable, skipped = mapInfo
+
+        # Generate reports
+        if pdfEnabled:
+          attachments.append(generatePDFReport(logName, language, size, legend, statisticTable))
+
+        # Generate extra 5km x 5km pages to report
+        if splitArea:
+          chunks = splitMapData(data, 5.0)
+          chunkCounter = 1
+
+          for c in chunks:
+            chunkName = logName+"_p%02d" % chunkCounter
+            chunkCounter+=1
+            print "Processing %s" % chunkName
+            mapInfo = drawMap(chunkName, c, language, False, peak = peak)
+            if len(mapInfo) == 0:
+               # Wrong file, skip it
+               continue
+            size, legend, statisticTable, skipped = mapInfo
+
+            # Generate reports
+            if pdfEnabled:
+              attachments.append(generatePDFReport(chunkName, language, size, legend, statisticTable))
+
+        message = generateHTMLReport(logName, language, statisticTable, skipped, charset)
+        processStatus.append((logfile, sum([len(skipped[e]) for e in skipped.keys()])))
+        break
+
+      # Prepare attachment list
+      if message != "":
+         reports[logfile] = {"message": message, "attachments": attachments}
 
     # Display a status summary
     print '='*60
@@ -1518,6 +1895,9 @@ if __name__ == '__main__':
     parser.add_option("-k", "--kml",
                       action="store_true", dest="kml", default=False,
                       help="enable KML report")
+    parser.add_option("-i", "--instant",
+                      action="store_true", dest="instant", default=False,
+                      help="enable instant CPM")
     parser.add_option("-g", "--gpx",
                       action="store_true", dest="gpx", default=False,
                       help="enable GPX report")
@@ -1533,6 +1913,15 @@ if __name__ == '__main__':
     parser.add_option("-d", "--distance",
                       action="store_true", dest="distance", default=False,
                       help="disable distance constrains")
+    parser.add_option("-s", "--summary",
+                      action="store_true", dest="summary", default=False,
+                      help="generate a summary report")
+    parser.add_option("-a", "--area",
+                      action="store_true", dest="area", default=False,
+                      help="split area in multiple reports (5km x 5km max)")
+    parser.add_option("-m", "--max",
+                      action="store_true", dest="peak", default=False,
+                      help="keep peak measurement per block")
 
     (options, args) = parser.parse_args()
 
@@ -1541,6 +1930,3 @@ if __name__ == '__main__':
 
     files = glob.glob(args[0])
     processFiles(files, options)
-
-
-
