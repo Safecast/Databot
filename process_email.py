@@ -15,6 +15,7 @@ import re
 
 # safecast module
 from bgeigie_report import processFiles
+from export_safecast import SafecastAPI
 
 # email modules
 import smtplib
@@ -27,6 +28,9 @@ from email import Encoders
 # zip file support
 import zipfile
 
+# Google sheets
+import gspread
+
 # -----------------------------------------------------------------------------
 # Definitions
 # -----------------------------------------------------------------------------
@@ -37,7 +41,7 @@ attachment_extensions = [".LOG", ".TXT"]
 # -----------------------------------------------------------------------------
 def logPrint(message):
    print datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), message
-   
+
 # -----------------------------------------------------------------------------
 # Simple options object (compatible with OptionParser)
 # -----------------------------------------------------------------------------
@@ -56,15 +60,15 @@ class Gmail():
      self.user = user
      self.pwd = password
      self.folder = ""
-     self.recipients = []  
-     self.message = ""      
+     self.recipients = []
+     self.message = ""
      self.files = []
 
    # --------------------------------------------------------------------------
    # Private utility methods
    # --------------------------------------------------------------------------
    def _createMessage(self, subject):
-     msg = MIMEMultipart()    
+     msg = MIMEMultipart()
      msg['Subject'] = subject
      msg['From'] = self.user
      msg['To'] = ",".join(self.recipients)
@@ -86,7 +90,7 @@ class Gmail():
      part.add_header('Content-Disposition', 'attachment; filename="%s"' % os.path.basename(filename))
      return part;
 
-   def _sendMessage(self, msg):    
+   def _sendMessage(self, msg):
      # Send the email to the SMTP server.
      smtp = smtplib.SMTP('smtp.gmail.com',587)
      smtp.ehlo()
@@ -99,7 +103,7 @@ class Gmail():
    # --------------------------------------------------------------------------
    # Fetch unseen emails attachment
    # --------------------------------------------------------------------------
-   def fetch(self, folder, blacklist):
+   def fetch(self, folder, blacklist, postfix = ""):
      self.folder = folder
 
      if not os.path.exists("%s" % (self.folder)):
@@ -128,6 +132,10 @@ class Gmail():
      options.world = True # set as default
      options.time = True # set as default
      options.distance = True # set as default
+     options.summary = False
+     options.instant = False
+     options.area = False
+     options.peak = False
      report = 0
      for emailid in items:
          logPrint("[GMAIL] Processing email id %s" % emailid)
@@ -138,6 +146,12 @@ class Gmail():
          # Check if any attachments at all
          if mail.get_content_maintype() != 'multipart':
            continue
+
+         if mail["Subject"] == None:
+           mail["Subject"] = ""
+
+         # Add extra options to subject
+         mail["Subject"] += postfix
 
          logPrint("[GMAIL] ["+mail["From"]+"] :" + mail["Subject"])
 
@@ -169,6 +183,20 @@ class Gmail():
 
          if mail["Subject"].upper().find("[WORLD]") != -1:
            options.world = True
+
+         if mail["Subject"].upper().find("[SUMMARY]") != -1:
+           options.summary = True
+
+         if mail["Subject"].upper().find("[SPLIT]") != -1:
+           options.area = True
+
+         if mail["Subject"].upper().find("[PEAK60]") != -1:
+           options.instant = False
+           options.peak = True
+
+         if mail["Subject"].upper().find("[PEAK5]") != -1:
+           options.instant = True
+           options.peak = True
 
          # If no special type requested, set to default
          if not report:
@@ -257,6 +285,17 @@ class Gmail():
 
          result = [mailto, filelist, options]
 
+         # Upload to Safecast API
+         if mail["Subject"].upper().find("[API ") != -1:
+           pattern = re.compile("([a-zA-Z0-9]+)")
+           position = mail["Subject"].upper().find("[API ") + 5
+           apikey = re.findall(pattern, mail["Subject"][position:])[0]
+
+           api = SafecastAPI(apikey)
+           for f in filelist:
+              api.setMetadata(os.path.basename(f), "", re.findall(email_pattern, mail["From"])[0], "")
+              api.upload(f)
+
      logPrint("[GMAIL] Done.")
      return result
 
@@ -264,10 +303,12 @@ class Gmail():
    # Send email to recipients with attachments
    # --------------------------------------------------------------------------
    def send(self, recipients, files):
-     self.recipients = recipients      
+     self.recipients = recipients
      self.files = files
 
-     for report in self.files:
+     filenames = self.files.keys()
+     filenames.sort()
+     for report in filenames:
        try:
          summary = self.files[report]["message"]
          # Multipart emails
@@ -299,6 +340,39 @@ class Gmail():
          continue
 
 # -----------------------------------------------------------------------------
+# Google Doc class for fetching configuration
+# -----------------------------------------------------------------------------
+class GoogleConfig():
+  def __init__(self, user, password, dockey, sheetname):
+    self.dockey = dockey
+    self.user = user
+    self.password = password
+    self.dockey = dockey
+    self.sheetname = sheetname
+
+  def fetch(self):
+    logPrint("[GDOCS] Spreatsheet login [%s]" % self.user)
+    gc = gspread.login(self.user, self.password)
+    sht = gc.open_by_key(self.dockey)
+    worksheet = sht.worksheet(self.sheetname)
+    logPrint("[GDOCS] Retrieving data")
+    data = worksheet.get_all_values()
+
+    fields = data[0]
+    for row in data[-1:]:
+      # Zip together the field names and values
+      items = zip(fields, row)
+
+      # Add the value to our dictionary
+      item = {}
+      for (name, value) in items:
+         item[name] = value.strip()
+
+      logPrint("[GDOCS] %s" % item)
+      return item
+
+
+# -----------------------------------------------------------------------------
 # Main
 # -----------------------------------------------------------------------------
 if __name__ == '__main__':
@@ -311,24 +385,38 @@ if __name__ == '__main__':
     password = config.get('gmail', 'password')
     recipients = config.get('gmail', 'recipients')
     blacklist = config.get('gmail', 'blacklist')
+    dockey = config.get('gmail', 'dockey')
+    sheetname = config.get('gmail', 'sheetname')
   else:
     logPrint("Configuration file is missing")
     sys.exit(0)
 
   print '='*80
+  sheet = GoogleConfig(user, password, dockey, sheetname)
+  # gconfig = sheet.fetch()
+  # recipients += gconfig["recipients"]
+  # blacklist += gconfig["blacklist"]
+  print '='*80
 
   # Start processing emails
   gmail = Gmail(user, password)
-  result = gmail.fetch("logs", blacklist)
+  result = gmail.fetch("logs", blacklist, "[kml] [pdf]")
 
   if (len(result)):
     mailto, filelist, options = result
+
+    # Upload logs to api.safecast.org
+    #if gconfig["apikey"] != "":
+    #  api = SafecastAPI(gconfig["apikey"])
+    #  for f in filelist:
+    #      api.setMetadata(os.path.basename(f), gconfig["details"], gconfig["credits"], gconfig["cities"])
+    #      api.upload(f)
 
     # Create email body
     reports = processFiles(filelist, options)
 
     # Send emails with attachments
-    if recipients != "": 
+    if recipients != "":
         # default recipients
         print "Default recipients =",recipients
         mailto = mailto + [m.strip() for m in recipients.split(",")]

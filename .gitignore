@@ -1,0 +1,4 @@
+*.pyc
+.safecast.conf
+archives/*
+data/tiles/*
